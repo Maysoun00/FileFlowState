@@ -6,6 +6,7 @@
         Null,
         NotNull,
         CouldBeNull,
-        ShouldNotBeNull
+        ShouldNotBeNull,
+        opened
     }
 }
