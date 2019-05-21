@@ -15,24 +15,22 @@ namespace Test
         [TestMethod]
         public void TestDereferenceOnKnownNull()
         {
-            var code =
+            var code = @"using System.IO;" +
 @"
 public class C
 {
-  private string x;
-
+  private FileStream fs = null;
   public void M()
   {
-     if (x == null)
-     {
-        var y = x.Length;
-     }
+    fs = File.Create(""C:\\Users\\SALMAAB\\Desktop\\ReadMe.txt"");
+    fs.Close();
+	fs.Read(null,0,0);
   }
 }
 ";
             var dx = GetAnalyzerDiagnostics(code);
-            Assert.AreEqual(1, dx.Length);
-            Assert.AreEqual(NullAnalyzer.PossibleNullDeferenceId, dx[0].Id);
+            //Assert.AreEqual(1, dx.Length);
+            Assert.AreEqual(FileAnalyzer.PossibleReadWithoutOpentId, dx[0].Id);
         }
 
         [TestMethod]
@@ -1184,7 +1182,7 @@ public class CouldBeNullAttribute : System.Attribute { }
 public class ShouldNotBeNullAttribute : System.Attribute { }
 ";
             var document = CreateDocument(code, LanguageNames.CSharp);
-            var analyzer = new NullAnalyzer();
+            var analyzer = new FileAnalyzer();
 
             var compilerDiagnostics = document.Project.GetCompilationAsync().Result.GetDiagnostics();
             bool hasCompileErrors = compilerDiagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
@@ -1200,7 +1198,7 @@ public class ShouldNotBeNullAttribute : System.Attribute { }
 
         protected override DiagnosticAnalyzer GetCSharpDiagnosticAnalyzer()
         {
-            return new NullAnalyzer();
+            return new FileAnalyzer();
         }
     }
 }

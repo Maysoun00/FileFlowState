@@ -32,10 +32,12 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="FileFlowState.cs" />
     <Compile Include="Flow\FlowAnalysis.cs" />
     <Compile Include="Flow\FlowAnalyzer.cs" />
     <Compile Include="Flow\FlowState.cs" />
     <Compile Include="Flow\FlowLocation.cs" />
+    <Compile Include="FileAnalyzer.cs" />
     <Compile Include="NullAnalyzer.cs" />
     <Compile Include="NullFlowState.cs" />
     <Compile Include="NullState.cs" />

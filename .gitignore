@@ -1,2 +1,7 @@
 src/.vs/
-.vs
+src/Nullaby/Analyzer/obj/
+src/Nullaby/Analyzer/bin/
+src/Nullaby/Setup/bin/
+src/Nullaby/Setup/obj/
+src/Nullaby/Test/bin/
+src/Nullaby/Test/obj/

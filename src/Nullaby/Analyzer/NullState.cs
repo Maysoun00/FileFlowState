@@ -7,6 +7,7 @@
         NotNull,
         CouldBeNull,
         ShouldNotBeNull,
-        opened
+        Opened,
+        Closed
     }
 }
