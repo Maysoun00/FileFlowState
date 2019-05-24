@@ -19,17 +19,20 @@ namespace Test
 @"
 public class C
 {
-  private FileStream fs = null;
+    public FileStream fs = null;
+  
   public void M()
   {
     fs = File.Create(""C:\\Users\\SALMAAB\\Desktop\\ReadMe.txt"");
     fs.Close();
-	fs.Read(null,0,0);
+    fs.Read(null,0,0);
+    
+	
   }
 }
 ";
             var dx = GetAnalyzerDiagnostics(code);
-            //Assert.AreEqual(1, dx.Length);
+            Assert.AreEqual(1, dx.Length);
             Assert.AreEqual(FileAnalyzer.PossibleReadWithoutOpentId, dx[0].Id);
         }
 

@@ -8,6 +8,8 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using System.Reflection;
+using System.IO;
 
 namespace Nullaby
 {
@@ -169,9 +171,10 @@ namespace Nullaby
             }
 
             var invocation = node as InvocationExpressionSyntax;
+
             if (invocation != null && this.model.GetSymbolInfo(((MemberAccessExpressionSyntax)invocation.Expression).Expression).Symbol.Kind != SymbolKind.NamedType)
             {
-                return this.WithReferenceState(((MemberAccessExpressionSyntax)invocation.Expression).Expression, this.GetReferenceState(invocation.Expression));
+                return this.WithReferenceState(((MemberAccessExpressionSyntax)invocation.Expression).Expression, this.GetReferenceState(invocation));
             }
 
             if (this.IsConditional(node))
@@ -352,16 +355,44 @@ namespace Nullaby
                     case SyntaxKind.ArrayCreationExpression:
                         return NullState.NotNull;
                     case SyntaxKind.InvocationExpression:
-                        var methodName = ((MemberAccessExpressionSyntax)((InvocationExpressionSyntax)expression).Expression).Name;
-                        if (methodName.Identifier.ValueText.StartsWith("Create") || methodName.Identifier.ValueText.StartsWith("Open"))
+                        
+                        var ourMethodName = ((MemberAccessExpressionSyntax)((InvocationExpressionSyntax)expression).Expression).Name;
+                        var invocation = expression as InvocationExpressionSyntax;
+                        var methodSymbol = (IMethodSymbol) model.GetSymbolInfo(invocation).Symbol;
+                        var declaringTypeName = string.Format(
+                            "{0}.{1}.{2}",
+                            methodSymbol.ContainingType.ContainingSymbol.ContainingSymbol.Name,
+                            methodSymbol.ContainingType.ContainingSymbol.Name,
+                            methodSymbol.ContainingType.Name
+                        );
+                        var methodName = methodSymbol.Name;
+                        var methodArgumentTypeNames = methodSymbol.Parameters.Select(
+                            p => p.Type.ContainingNamespace.Name + "." + p.Type.Name
+                        );
+                        Type type = Type.GetType(declaringTypeName);
+                        MethodInfo methodInfo = null;
+                        if (type != null)
+                        {
+                            methodInfo = type.GetRuntimeMethod(
+                                methodName,
+                                methodArgumentTypeNames.Select(typeName => Type.GetType(typeName)).ToArray()
+                            );
+                        }
+
+                        Type fileType = Type.GetType("System.IO.File");
+                        MethodInfo fileMethodInfo = fileType.GetRuntimeMethod(methodName, methodArgumentTypeNames.Select(typeName => Type.GetType(typeName)).ToArray());
+                        if (fileMethodInfo == methodInfo && ourMethodName.Identifier.ValueText.StartsWith("Create") || ourMethodName.Identifier.ValueText.StartsWith("Open"))
                         {
                             return NullState.Opened;
                         }
-                        if (methodName.Identifier.ValueText.StartsWith("Close"))
+
+                        Type streamType = Type.GetType("System.IO.Stream");
+                        MethodInfo streamMethodInfo = streamType.GetRuntimeMethod(methodName, methodArgumentTypeNames.Select(typeName => Type.GetType(typeName)).ToArray());
+                        if (streamMethodInfo == methodInfo && ourMethodName.Identifier.ValueText.StartsWith("Close"))
                         {
                             return NullState.Closed;
                         }
-                        return NullState.Unknown;
+                        return GetReferenceState(((MemberAccessExpressionSyntax)((InvocationExpressionSyntax)expression).Expression).Expression);
                     case SyntaxKind.ConditionalAccessExpression:
                         var ca = (ConditionalAccessExpressionSyntax)expression;
                         var exprState = GetReferenceState(ca.Expression);
@@ -379,6 +410,8 @@ namespace Nullaby
                     case SyntaxKind.CoalesceExpression:
                         var co = (BinaryExpressionSyntax)expression;
                         return GetReferenceState(co.Right);
+                    case SyntaxKind.SimpleMemberAccessExpression:
+                        return GetReferenceState(((MemberAccessExpressionSyntax)expression).Expression);
                 }
 
                 var symbol = this.model.GetSymbolInfo(expression).Symbol;
@@ -490,7 +523,7 @@ namespace Nullaby
             return info;
         }
 
-        private static SymbolInfo CreateSymbolInfo(ISymbol symbol)
+        private  static SymbolInfo CreateSymbolInfo(ISymbol symbol)
         {
             // check if it can possibly be null
             //var type = GetVariableType(symbol);
@@ -537,16 +570,20 @@ namespace Nullaby
             //    }
             //}
 
-            if(symbol.Name.StartsWith("Close"))
-            {
-                return new SymbolInfo(NullState.Closed);
-            }
-            if (symbol.Name.StartsWith("Create") || symbol.Name.StartsWith("Open"))
-            {
-                return new SymbolInfo(NullState.Opened);
-            }
+            //var closeSymbol = this.model.GetSymbolInfo().Symbol as IMethodSymbol;
+            Type fileStreamType = Type.GetType("System.IO.FileStream");
+            MethodInfo closeMethodInfo = fileStreamType.GetRuntimeMethod("Close", new Type[0]);
+     
+            //if (symbol.Name.StartsWith("Close"))
+            //{
+            //    return new SymbolInfo(NullState.Closed);
+            //}
+            //if (symbol.Name.StartsWith("Create") || symbol.Name.StartsWith("Open"))
+            //{
+            //    return new SymbolInfo(NullState.Opened);
+            //}
 
-                return new SymbolInfo(NullState.Unknown);
+            return new SymbolInfo(NullState.Unknown);
         }
 
         private static ITypeSymbol GetVariableType(ISymbol symbol)

@@ -157,15 +157,18 @@ namespace Nullaby
                 base.VisitMemberAccessExpression(node);
 
                 // check for possible dereference of null on member access (dot)
-                var state = this.flowAnalysis.GetFlowState(node.Expression);
-                switch (state.GetReferenceState(node.Expression))
-                {
-                    case NullState.Closed:
-                    case NullState.Unknown:
-                        
-                        context.ReportDiagnostic(Diagnostic.Create(PossibleReadWithoutOpen, node.Name.GetLocation()));
-                        break;
-                }
+                //var state = this.flowAnalysis.GetFlowState(node.Expression);
+                //switch (state.GetReferenceState(node.Expression))
+                //{
+                //    case NullState.Closed:
+                //    case NullState.Unknown:
+                //        var method = context.SemanticModel.GetSymbolInfo(node).Symbol as IMethodSymbol;
+                //        if (!method.Name.StartsWith("Open") && !method.Name.StartsWith("Close") && !method.Name.StartsWith("Create"))
+                //        {
+                //            context.ReportDiagnostic(Diagnostic.Create(PossibleReadWithoutOpen, node.GetLocation()));//get more accurate location
+                //        }
+                //        break;
+                //}
             }
 
             public override void VisitAssignmentExpression(AssignmentExpressionSyntax node)
@@ -227,10 +230,11 @@ namespace Nullaby
                     case NullState.Closed:
                     case NullState.Unknown:
                         var method = context.SemanticModel.GetSymbolInfo(node).Symbol as IMethodSymbol;
-                        if (!method.Name.StartsWith("Open") && !method.Name.StartsWith("Close")){
+                        if (!method.Name.StartsWith("Open") && !method.Name.StartsWith("Close") && !method.Name.StartsWith("Create"))
+                        {
                             context.ReportDiagnostic(Diagnostic.Create(PossibleReadWithoutOpen, node.GetLocation()));//get more accurate location
                         }                                
-                        break;
+                        break;            
                 }
 
                 //if (method != null)
