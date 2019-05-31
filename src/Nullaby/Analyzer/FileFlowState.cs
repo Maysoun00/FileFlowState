@@ -360,15 +360,15 @@ namespace Nullaby
                         var invocation = expression as InvocationExpressionSyntax;
                         var methodSymbol = (IMethodSymbol) model.GetSymbolInfo(invocation).Symbol;
                         var declaringTypeName = string.Format(
-                            "{0}.{1}.{2}",
-                            methodSymbol.ContainingType.ContainingSymbol.ContainingSymbol.Name,
-                            methodSymbol.ContainingType.ContainingSymbol.Name,
+                            "{0}.{1}",
+                            methodSymbol.ContainingNamespace.ToString(),
                             methodSymbol.ContainingType.Name
                         );
                         var methodName = methodSymbol.Name;
                         var methodArgumentTypeNames = methodSymbol.Parameters.Select(
-                            p => p.Type.ContainingNamespace.Name + "." + p.Type.Name
-                        );
+                            p => (p.Type.TypeKind == TypeKind.Array) ? 
+                        (((IArrayTypeSymbol)p.Type).ElementType.ContainingNamespace.ToString() + "." + ((IArrayTypeSymbol)p.Type).ElementType.Name + "[]") 
+                        : ( p.Type.ContainingNamespace.Name + "." + p.Type.Name));
                         Type type = Type.GetType(declaringTypeName);
                         MethodInfo methodInfo = null;
                         if (type != null)
