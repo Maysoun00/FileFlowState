@@ -16,20 +16,20 @@ namespace Nullaby
     internal class FileFlowState : FlowState
     {
         private readonly SemanticModel model;
-        private readonly ImmutableDictionary<object, NullState> variableStates;
+        private readonly ImmutableDictionary<object, FileState> variableStates;
 
         public FileFlowState(SemanticModel model)
-            : this(model, ImmutableDictionary.Create<object, NullState>(new VariableComparer(model)))
+            : this(model, ImmutableDictionary.Create<object, FileState>(new VariableComparer(model)))
         {
         }
 
-        private FileFlowState(SemanticModel model, ImmutableDictionary<object, NullState> variableStates)
+        private FileFlowState(SemanticModel model, ImmutableDictionary<object, FileState> variableStates)
         {
             this.model = model;
             this.variableStates = variableStates;
         }
 
-        private FileFlowState With(ImmutableDictionary<object, NullState> newVariableStates)
+        private FileFlowState With(ImmutableDictionary<object, FileState> newVariableStates)
         {
             if (this.variableStates != newVariableStates)
             {
@@ -59,14 +59,14 @@ namespace Nullaby
         }
 
         private void Join(
-            ImmutableDictionary<object, NullState> branchA,
-            ImmutableDictionary<object, NullState> branchB,
-            ref ImmutableDictionary<object, NullState> joined)
+            ImmutableDictionary<object, FileState> branchA,
+            ImmutableDictionary<object, FileState> branchB,
+            ref ImmutableDictionary<object, FileState> joined)
         {
             // for all items in a
             foreach (var kvp in branchA)
             {
-                NullState bs;
+                FileState bs;
                 if (!branchB.TryGetValue(kvp.Key, out bs))
                 {
                     bs = GetDeclaredState(kvp.Key);
@@ -78,73 +78,47 @@ namespace Nullaby
             }
         }
 
-        private NullState Join(NullState a, NullState b)
+        private FileState Join(FileState a, FileState b)
         {
             switch (a)
             {
-                case NullState.Unknown:
+                case FileState.Unknown:
                     switch (b)
                     {
-                        case NullState.Unknown:
-                        case NullState.NotNull:
-                        case NullState.ShouldNotBeNull:
-                            return NullState.Unknown;
-                        case NullState.Null:
-                        case NullState.CouldBeNull:
-                            return NullState.CouldBeNull;
+                        case FileState.Unknown:
+                        case FileState.Opened:
+                        case FileState.Closed:
+                            return FileState.Unknown;
                     }
                     break;
 
-                case NullState.CouldBeNull:
-                    return NullState.CouldBeNull;
-
-                case NullState.ShouldNotBeNull:
+                case FileState.Opened:
                     switch (b)
                     {
-                        case NullState.ShouldNotBeNull:
-                        case NullState.NotNull:
-                            return NullState.ShouldNotBeNull;
-
-                        case NullState.Unknown:
-                            return NullState.Unknown;
-
-                        case NullState.CouldBeNull:
-                        case NullState.Null:
-                            return NullState.CouldBeNull;
+                        case FileState.Unknown:
+                            return FileState.Unknown;
+                        case FileState.Opened:
+                            return FileState.Opened;
+                        case FileState.Closed:
+                            return FileState.Unknown;
                     }
                     break;
 
-                case NullState.Null:
+                case FileState.Closed:
                     switch (b)
                     {
-                        case NullState.Unknown:
-                        case NullState.CouldBeNull:
-                        case NullState.ShouldNotBeNull:
-                        case NullState.NotNull:
-                            return NullState.CouldBeNull;
-
-                        case NullState.Null:
-                            return NullState.Null;
+                        case FileState.Unknown:
+                            return FileState.Unknown;
+                        case FileState.Closed:
+                            return FileState.Closed;
+                        case FileState.Opened:
+                            return FileState.Unknown;
                     }
                     break;
 
-                case NullState.NotNull:
-                    switch (b)
-                    {
-                        case NullState.Unknown:
-                            return NullState.Unknown;
-                        case NullState.ShouldNotBeNull:
-                            return NullState.ShouldNotBeNull;
-                        case NullState.NotNull:
-                            return NullState.NotNull;
-                        case NullState.CouldBeNull:
-                        case NullState.Null:
-                            return NullState.CouldBeNull;
-                    }
-                    break;
             }
 
-            return NullState.Unknown;
+            return FileState.Unknown;
         }
 
         public override FlowState After(SyntaxNode node)
@@ -220,41 +194,32 @@ namespace Nullaby
                     influencedExpr = this.GetVariableExpression(binop.Right);
                 }
 
-                if (influencedExpr != null)
-                {
-                    if (kind == SyntaxKind.EqualsExpression)
-                    {
-                        trueState = this.WithReferenceState(influencedExpr, NullState.Null);
-                        falseState = this.WithReferenceState(influencedExpr, NullState.NotNull);
-                    }
-                    else
-                    {
-                        trueState = this.WithReferenceState(influencedExpr, NullState.NotNull);
-                        falseState = this.WithReferenceState(influencedExpr, NullState.Null);
-                    }
-                }
             }
         }
 
-        public FileFlowState WithReferenceState(ISymbol symbol, NullState state)
+        public FileFlowState WithReferenceState(ISymbol symbol, FileState state)
         {
             switch (symbol.Kind)
             {
                 case SymbolKind.Local:
                 case SymbolKind.Parameter:
                 case SymbolKind.RangeVariable:
-                    return this.With(this.variableStates.SetItem(symbol, state));
+                    return this.With(this.variableStates.SetItem(symbol.OriginalDefinition, state));
                 default:
                     return this;
             }
         }
 
-        public FileFlowState WithReferenceState(ExpressionSyntax expr, NullState state)
+        public FileFlowState WithReferenceState(ExpressionSyntax expr, FileState state)
         {
             var variable = GetVariableExpression(expr);
             if (variable != null)
             {
-                return this.With(this.variableStates.SetItem(variable, state));
+                var expSymbol = this.model.GetSymbolInfo(variable).Symbol;
+                if (expSymbol != null)
+                {
+                    return this.With(this.variableStates.SetItem(expSymbol.OriginalDefinition, state));
+                }
             }
 
             return this;
@@ -299,7 +264,7 @@ namespace Nullaby
             return expr;
         }
 
-        public NullState GetAssignmentState(ExpressionSyntax variable, bool isInvocationParameter = false)
+        public FileState GetAssignmentState(ExpressionSyntax variable, bool isInvocationParameter = false)
         {
             var symbol = this.model.GetSymbolInfo(variable).Symbol;
             if (symbol != null)
@@ -308,21 +273,21 @@ namespace Nullaby
             }
             else
             {
-                return NullState.Unknown;
+                return FileState.Unknown;
             }
         }
 
-        public NullState GetAssignmentState(ISymbol symbol, bool isInvocationParameter = false)
+        public FileState GetAssignmentState(ISymbol symbol, bool isInvocationParameter = false)
         {
             switch (symbol.Kind)
             {
                 case SymbolKind.Local:
-                    return NullState.Unknown;
+                    return FileState.Unknown;
                 case SymbolKind.Parameter:
                     if (!isInvocationParameter)
                     {
                         // method body parameters get their state assigned just like locals
-                        return NullState.Unknown;
+                        return FileState.Unknown;
                     }
                     else
                     {
@@ -333,14 +298,15 @@ namespace Nullaby
             }
         }
 
-        public NullState GetReferenceState(ExpressionSyntax expression)
+        public FileState GetReferenceState(ExpressionSyntax expression)
         {
             if (expression != null)
             {
                 expression = WithoutParens(expression);
 
-                NullState state;
-                if (this.variableStates.TryGetValue(expression, out state))
+                var expSymbol = this.model.GetSymbolInfo(expression).Symbol;
+                FileState state;
+                if (expSymbol != null && this.variableStates.TryGetValue(expSymbol.OriginalDefinition, out state))
                 {
                     return state;
                 }
@@ -348,27 +314,28 @@ namespace Nullaby
                 switch (expression.Kind())
                 {
                     case SyntaxKind.NullLiteralExpression:
-                        return NullState.Null;
+                        return FileState.Closed;
+                        //TODO: check when doing fs = null without fs.Close() before it
 
-                    case SyntaxKind.StringLiteralExpression:
-                    case SyntaxKind.ObjectCreationExpression:
-                    case SyntaxKind.ArrayCreationExpression:
-                        return NullState.NotNull;
                     case SyntaxKind.InvocationExpression:
-                        
+
                         var ourMethodName = ((MemberAccessExpressionSyntax)((InvocationExpressionSyntax)expression).Expression).Name;
                         var invocation = expression as InvocationExpressionSyntax;
-                        var methodSymbol = (IMethodSymbol) model.GetSymbolInfo(invocation).Symbol;
+                        var methodSymbol = (IMethodSymbol)model.GetSymbolInfo(invocation).Symbol;
                         var declaringTypeName = string.Format(
-                            "{0}.{1}.{2}",
-                            methodSymbol.ContainingType.ContainingSymbol.ContainingSymbol.Name,
-                            methodSymbol.ContainingType.ContainingSymbol.Name,
+                             "{0}.{1}",
+                            methodSymbol.ContainingNamespace.ToString(),
                             methodSymbol.ContainingType.Name
                         );
                         var methodName = methodSymbol.Name;
-                        var methodArgumentTypeNames = methodSymbol.Parameters.Select(
-                            p => p.Type.ContainingNamespace.Name + "." + p.Type.Name
-                        );
+                        IEnumerable<string> methodArgumentTypeNames = Enumerable.Empty<string>();
+                        if (methodSymbol.Parameters != null)
+                        {
+                            methodArgumentTypeNames = methodSymbol.Parameters.Select(
+                               p => (p.Type.TypeKind == TypeKind.Array) ?
+                        (((IArrayTypeSymbol)p.Type).ElementType.ContainingNamespace.ToString() + "." + ((IArrayTypeSymbol)p.Type).ElementType.Name + "[]")
+                        : (p.Type.ContainingNamespace.Name + "." + p.Type.Name));
+                        }
                         Type type = Type.GetType(declaringTypeName);
                         MethodInfo methodInfo = null;
                         if (type != null)
@@ -383,33 +350,18 @@ namespace Nullaby
                         MethodInfo fileMethodInfo = fileType.GetRuntimeMethod(methodName, methodArgumentTypeNames.Select(typeName => Type.GetType(typeName)).ToArray());
                         if (fileMethodInfo == methodInfo && ourMethodName.Identifier.ValueText.StartsWith("Create") || ourMethodName.Identifier.ValueText.StartsWith("Open"))
                         {
-                            return NullState.Opened;
+                            return FileState.Opened;
                         }
 
                         Type streamType = Type.GetType("System.IO.Stream");
                         MethodInfo streamMethodInfo = streamType.GetRuntimeMethod(methodName, methodArgumentTypeNames.Select(typeName => Type.GetType(typeName)).ToArray());
                         if (streamMethodInfo == methodInfo && ourMethodName.Identifier.ValueText.StartsWith("Close"))
                         {
-                            return NullState.Closed;
+                            return FileState.Closed;
                         }
                         return GetReferenceState(((MemberAccessExpressionSyntax)((InvocationExpressionSyntax)expression).Expression).Expression);
-                    case SyntaxKind.ConditionalAccessExpression:
-                        var ca = (ConditionalAccessExpressionSyntax)expression;
-                        var exprState = GetReferenceState(ca.Expression);
-                        switch (GetReferenceState(ca.Expression))
-                        {
-                            case NullState.Null:
-                                return NullState.Null;
-                            case NullState.CouldBeNull:
-                            case NullState.Unknown:
-                                return NullState.CouldBeNull;
-                            default:
-                                return GetDeclaredState(ca.WhenNotNull);
-                        }
 
-                    case SyntaxKind.CoalesceExpression:
-                        var co = (BinaryExpressionSyntax)expression;
-                        return GetReferenceState(co.Right);
+                    
                     case SyntaxKind.SimpleMemberAccessExpression:
                         return GetReferenceState(((MemberAccessExpressionSyntax)expression).Expression);
                 }
@@ -421,13 +373,13 @@ namespace Nullaby
                 }
             }
 
-            return NullState.Unknown;
+            return FileState.Unknown;
         }
 
-        public NullState GetReferenceState(ISymbol symbol)
+        public FileState GetReferenceState(ISymbol symbol)
         {
-            NullState state;
-            if (this.variableStates.TryGetValue(symbol, out state))
+            FileState state;
+            if (this.variableStates.TryGetValue(symbol.OriginalDefinition, out state))
             {
                 return state;
             }
@@ -435,7 +387,7 @@ namespace Nullaby
             return GetDeclaredState(symbol);
         }
 
-        public NullState GetDeclaredState(object symbolOrSyntax)
+        public FileState GetDeclaredState(object symbolOrSyntax)
         {
             var syntax = symbolOrSyntax as ExpressionSyntax;
             if (syntax != null)
@@ -449,10 +401,10 @@ namespace Nullaby
                 return GetDeclaredState(symbol);
             }
 
-            return NullState.Unknown;
+            return FileState.Unknown;
         }
 
-        public NullState GetDeclaredState(ExpressionSyntax syntax)
+        public FileState GetDeclaredState(ExpressionSyntax syntax)
         {
             var symbol = this.model.GetSymbolInfo(syntax).Symbol;
             if (symbol != null)
@@ -461,50 +413,30 @@ namespace Nullaby
             }
             else
             {
-                return NullState.Unknown;
+                return FileState.Unknown;
             }
         }
 
-        public static NullState GetDeclaredState(ISymbol symbol)
+        public static FileState GetDeclaredState(ISymbol symbol)
         {
             switch (symbol.Kind)
             {
                 case SymbolKind.Local:
-                    return NullState.Unknown;
+                    return FileState.Unknown;
 
                 default:
-                    return GetSymbolInfo(symbol).NullState;
+                    return GetSymbolInfo(symbol).FileState;
             }
         }
 
-        private static bool TryGetAttributedState(ImmutableArray<AttributeData> attrs, out NullState state)
-        {
-            foreach (var a in attrs)
-            {
-                if (a.AttributeClass.Name == "ShouldNotBeNullAttribute")
-                {
-                    state = NullState.ShouldNotBeNull;
-                    return true;
-                }
-                else if (a.AttributeClass.Name == "CouldBeNullAttribute")
-                {
-                    state = NullState.CouldBeNull;
-                    return true;
-                }
-            }
-
-            state = NullState.Unknown;
-            return false;
-
-        }
 
         private class SymbolInfo
         {
-            public readonly NullState NullState;
+            public readonly FileState FileState;
 
-            public SymbolInfo(NullState defaultState)
+            public SymbolInfo(FileState defaultState)
             {
-                this.NullState = defaultState;
+                this.FileState = defaultState;
             }
         }
 
@@ -523,7 +455,7 @@ namespace Nullaby
             return info;
         }
 
-        private  static SymbolInfo CreateSymbolInfo(ISymbol symbol)
+        private static SymbolInfo CreateSymbolInfo(ISymbol symbol)
         {
             // check if it can possibly be null
             //var type = GetVariableType(symbol);
@@ -573,7 +505,7 @@ namespace Nullaby
             //var closeSymbol = this.model.GetSymbolInfo().Symbol as IMethodSymbol;
             Type fileStreamType = Type.GetType("System.IO.FileStream");
             MethodInfo closeMethodInfo = fileStreamType.GetRuntimeMethod("Close", new Type[0]);
-     
+
             //if (symbol.Name.StartsWith("Close"))
             //{
             //    return new SymbolInfo(NullState.Closed);
@@ -583,7 +515,7 @@ namespace Nullaby
             //    return new SymbolInfo(NullState.Opened);
             //}
 
-            return new SymbolInfo(NullState.Unknown);
+            return new SymbolInfo(FileState.Unknown);
         }
 
         private static ITypeSymbol GetVariableType(ISymbol symbol)

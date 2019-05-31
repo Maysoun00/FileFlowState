@@ -14,8 +14,7 @@ namespace Nullaby
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
     public class FileAnalyzer : DiagnosticAnalyzer
     {
-        public const string PossibleNullDeferenceId = "NN0001";
-        public const string PossibleNullAssignmentId = "NN0002";
+
         public const string PossibleReadWithoutOpentId = "NN0002";
 
         internal static DiagnosticDescriptor PossibleReadWithoutOpen =
@@ -26,26 +25,9 @@ namespace Nullaby
                 category: "Files",
                 defaultSeverity: DiagnosticSeverity.Warning,
                 isEnabledByDefault: true);
-        internal static DiagnosticDescriptor PossibleNullDereference =
-            new DiagnosticDescriptor(
-                id: PossibleNullDeferenceId,
-                title: "Possible null dereference",
-                messageFormat: "Possible dereference of null value",
-                category: "Nulls",
-                defaultSeverity: DiagnosticSeverity.Warning,
-                isEnabledByDefault: true);
-
-        internal static DiagnosticDescriptor PossibleNullAssignment =
-           new DiagnosticDescriptor(
-                id: PossibleNullAssignmentId,
-                title: "Possible null assignment",
-                messageFormat: "Possible assignment of null value to variable or parameter that should not be null.",
-                category: "Nulls",
-                defaultSeverity: DiagnosticSeverity.Warning,
-                isEnabledByDefault: true);
 
         private static readonly ImmutableArray<DiagnosticDescriptor> s_supported =
-            ImmutableArray.Create(PossibleNullDereference, PossibleNullAssignment);
+            ImmutableArray.Create(PossibleReadWithoutOpen);
 
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
         {
@@ -82,7 +64,7 @@ namespace Nullaby
                 this.Visit(node);
             }
 
-            private NullState GetReferenceState(ExpressionSyntax expression)
+            private FileState GetReferenceState(ExpressionSyntax expression)
             {
                 var state = this.flowAnalysis.GetFlowState(expression);
                 return state.GetReferenceState(expression);
@@ -191,18 +173,9 @@ namespace Nullaby
                 CheckAssignment(state.GetAssignmentState(symbol, isInvocationParameter), exprState, expression);
             }
 
-            private void CheckAssignment(NullState variableState, NullState expressionState, ExpressionSyntax expression)
+            private void CheckAssignment(FileState variableState, FileState expressionState, ExpressionSyntax expression)
             {
-                if (variableState == NullState.ShouldNotBeNull)
-                {
-                    switch (expressionState)
-                    {
-                        case NullState.Null:
-                        case NullState.CouldBeNull:
-                            context.ReportDiagnostic(Diagnostic.Create(PossibleNullAssignment, expression.GetLocation()));
-                            break;
-                    }
-                }
+                
             }
 
             public override void VisitReturnStatement(ReturnStatementSyntax node)
@@ -227,8 +200,8 @@ namespace Nullaby
                 var state = this.flowAnalysis.GetFlowState(node.Expression);
                 switch (state.GetReferenceState(((MemberAccessExpressionSyntax)node.Expression).Expression))
                 {
-                    case NullState.Closed:
-                    case NullState.Unknown:
+                    case FileState.Closed:
+                    case FileState.Unknown:
                         var method = context.SemanticModel.GetSymbolInfo(node).Symbol as IMethodSymbol;
                         if (!method.Name.StartsWith("Open") && !method.Name.StartsWith("Close") && !method.Name.StartsWith("Create"))
                         {
