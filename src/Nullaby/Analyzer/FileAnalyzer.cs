@@ -14,7 +14,7 @@ namespace Nullaby
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
     public class FileAnalyzer : DiagnosticAnalyzer
     {
-
+        public const string PossibleEndOfScopeWithoutCloseId = "NN0001";
         public const string PossibleReadWithoutOpentId = "NN0002";
 
         internal static DiagnosticDescriptor PossibleReadWithoutOpen =
@@ -26,8 +26,17 @@ namespace Nullaby
                 defaultSeverity: DiagnosticSeverity.Warning,
                 isEnabledByDefault: true);
 
+        internal static DiagnosticDescriptor PossibleEndOfScopeWithoutClose =
+           new DiagnosticDescriptor(
+                id: PossibleEndOfScopeWithoutCloseId,
+                title: "Possible end of scope without close",
+                messageFormat: "Possible end of scope without closing a file.",
+                category: "Files",
+                defaultSeverity: DiagnosticSeverity.Warning,
+                isEnabledByDefault: true);
+
         private static readonly ImmutableArray<DiagnosticDescriptor> s_supported =
-            ImmutableArray.Create(PossibleReadWithoutOpen);
+            ImmutableArray.Create(PossibleReadWithoutOpen, PossibleEndOfScopeWithoutClose);
 
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
         {
@@ -62,6 +71,16 @@ namespace Nullaby
 
                 // check assignments and dereferences and report diagnostics
                 this.Visit(node);
+
+                var state = this.flowAnalysis.GetFlowState(node);
+                foreach(var variableState in state.VariableStates)
+                {
+                    if(variableState.Value != FileState.Closed)
+                    {
+                        context.ReportDiagnostic(Diagnostic.Create(PossibleEndOfScopeWithoutClose, node.GetLocation())); // TODO: warning in very wrong location GetLocations?!
+                    }
+                }
+
             }
 
             private FileState GetReferenceState(ExpressionSyntax expression)

@@ -23,28 +23,19 @@ public class C
   
   public void M()
   {
-    fs = File.Create(""C:\\Users\\SALMAAB\\Desktop\\ReadMe.txt"");
-   
-    int i = 0;
+        fs = File.Create(""C:\\Users\\SALMAAB\\Desktop\\ReadMe.txt"");
 
-    if ( i == 0 && true ) {
-    fs.Close();
-    //fs.ReadByte();
-    //fs.WriteByte(0);	
-    //fs.Read(null,0,0);
-    fs.WriteAsync(null,0,0);
-
-
-  }
-
-
+    if(true)
+    {
+        FileStream ds = File.Create(""C:\\Users\\SALMAAB\\Desktop\\ReadMe.txt"");
     }
-   
+    fs.Close();
+  }  
 }
 ";
             var dx = GetAnalyzerDiagnostics(code);
             Assert.AreEqual(1, dx.Length);
-            Assert.AreEqual(FileAnalyzer.PossibleReadWithoutOpentId, dx[0].Id);
+            Assert.AreEqual(FileAnalyzer.PossibleEndOfScopeWithoutCloseId, dx[0].Id);
         }
 
         protected Diagnostic[] GetAnalyzerDiagnostics(string code)

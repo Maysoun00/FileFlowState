@@ -29,6 +29,14 @@ namespace Nullaby
             this.variableStates = variableStates;
         }
 
+        public ImmutableDictionary<object, FileState> VariableStates
+        {
+            get
+            {
+                return variableStates;
+            }
+        }
+
         private FileFlowState With(ImmutableDictionary<object, FileState> newVariableStates)
         {
             if (this.variableStates != newVariableStates)
