@@ -8,7 +8,8 @@
         BeginTransaction,
         Transaction,
         CommitOrRollback,
-        TwiceCommitOrRollback
+        TwiceCommitOrRollback,
+        UnknownTR
 
     }
 }

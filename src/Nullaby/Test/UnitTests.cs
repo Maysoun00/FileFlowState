@@ -53,14 +53,15 @@ namespace Test
             tr.Commit();
             tr.Rollback();
             db.Open();
-            db.Close();
-
+            if( true){
+                db.Close();
+            }
            
         }
     }
 ";
             var dx = GetAnalyzerDiagnostics(code);
-            Assert.AreEqual(2, dx.Length);// one open transaction for func BeginTransaction, second for both rollback and commit.
+            Assert.AreEqual(2, dx.Length);// one open db and not close it, second for both rollback and commit.
             Assert.AreEqual(DBAnalyzer.PossibleEndOfScopeWithoutCloseId, dx[0].Id);
         }
 

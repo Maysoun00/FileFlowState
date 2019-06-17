@@ -97,6 +97,7 @@ namespace DB
                         case DBState.Unknown:
                         case DBState.Connected:
                         case DBState.Closed:
+                        case DBState.BeginTransaction:
                             return DBState.Unknown;
                     }
                     break;
@@ -105,6 +106,7 @@ namespace DB
                     switch (b)
                     {
                         case DBState.Unknown:
+                        case DBState.BeginTransaction:
                             return DBState.Unknown;
                         case DBState.Connected:
                             return DBState.Connected;
@@ -121,18 +123,19 @@ namespace DB
                         case DBState.Closed:
                             return DBState.Closed;
                         case DBState.Connected:
+                        case DBState.BeginTransaction:
                             return DBState.Unknown;
                     }
                     break;
-                    /*
+                    
                 case DBState.BeginTransaction:
                     switch (b)
                     {
                         case DBState.Unknown:
-                            return DBState.Unknown;
                         case DBState.Closed:
-                            return DBState.BeginTransaction;
                         case DBState.Connected:
+                            return DBState.Unknown;
+                        case DBState.BeginTransaction:
                             return DBState.BeginTransaction;
                     }
                     break;
@@ -140,36 +143,36 @@ namespace DB
                     switch (b)
                     {
                         case DBState.CommitOrRollback:
-                            return DBState.Transaction;
+                            return DBState.UnknownTR;
                         case DBState.Transaction:
                             return DBState.Transaction;
                         case DBState.TwiceCommitOrRollback:
-                            return DBState.Unknown;
+                            return DBState.UnknownTR;
                     }
                     break;
                 case DBState.CommitOrRollback:
                     switch (b)
                     {
-                        case DBState.Unknown:
-                            return DBState.Unknown;
-                        case DBState.Closed:
-                            return DBState.Closed;
-                        case DBState.Connected:
-                            return DBState.Unknown;
+                        case DBState.CommitOrRollback:
+                            return DBState.CommitOrRollback;
+                        case DBState.Transaction:
+                            return DBState.UnknownTR;
+                        case DBState.TwiceCommitOrRollback:
+                            return DBState.UnknownTR;
                     }
                     break;
                 case DBState.TwiceCommitOrRollback:
                     switch (b)
                     {
-                        case DBState.Unknown:
-                            return DBState.Unknown;
-                        case DBState.Closed:
-                            return DBState.Closed;
-                        case DBState.Connected:
-                            return DBState.Unknown;
+                        case DBState.CommitOrRollback:
+                            return DBState.UnknownTR;
+                        case DBState.Transaction:
+                            return DBState.UnknownTR;
+                        case DBState.TwiceCommitOrRollback:
+                            return DBState.TwiceCommitOrRollback;
                     }
                     break;
-                    */
+                    
 
             }
 
@@ -357,14 +360,18 @@ namespace DB
             switch (symbol.Kind)
             {
                 case SymbolKind.Local:
-                    if(symbol.ToString() == "Transaction")
+                    if(GetVariableType(symbol).ToString() == "Transaction")
                     {
-
+                        return DBState.UnknownTR;
                     }
                     return DBState.Unknown;
                 case SymbolKind.Parameter:
                     if (!isInvocationParameter)
                     {
+                        if (GetVariableType(symbol).ToString() == "Transaction")
+                        {
+                            return DBState.UnknownTR;
+                        }
                         // method body parameters get their state assigned just like locals
                         return DBState.Unknown;
                     }
@@ -488,12 +495,16 @@ namespace DB
             switch (symbol.Kind)
             {
                 case SymbolKind.Local:
+                    if (GetVariableType(symbol).ToString() == "Transaction")
+                    {
+                        return DBState.UnknownTR;
+                    }
                     return DBState.Unknown;
-
                 default:
                     return GetSymbolInfo(symbol).FileState;
             }
         }
+
 
 
         private class SymbolInfo
@@ -580,7 +591,10 @@ namespace DB
             //{
             //    return new SymbolInfo(NullState.Opened);
             //}
-
+            if (symbol.OriginalDefinition.ContainingType.ToString() == "Transaction")
+            {
+                return new SymbolInfo(DBState.UnknownTR);
+            }
             return new SymbolInfo(DBState.Unknown);
         }
 
