@@ -1,0 +1,29 @@
+using System.Data;
+using System;
+
+
+Analysis Name: PossibleEndOfScopeWithoutClose
+ID: "NN0001"
+title: "Possible end of scope without close"
+Analysis message: "Possible end of scope without closing a DB connection."
+type: Warning
+ReportStates: Unknown, Connected
+
+States{
+
+Unknown, S
+Connected,
+Closed,
+
+
+}
+
+
+Connections{
+
+Unknown,<global namespace>.DB.Open,Connected
+Connected,<global namespace>.DB.Close,Closed
+Closed,<global namespace>.DB.Close,Closed
+Connected,global namespace>.DB.Open,Connected
+
+}
