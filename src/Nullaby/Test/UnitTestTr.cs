@@ -5,7 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Linq;
 using TestHelper;
-using DB;
+using Transaction;
 
 namespace Test
 {
@@ -16,7 +16,7 @@ namespace Test
         public void TestDereferenceOnKnownNull()
         {
             var code = @"using System.Data.SqlClient;using System.IO;" +
-@"
+            @"
     public class Transaction
     {
         public void Commit(){
@@ -25,50 +25,36 @@ namespace Test
         public void Rollback(){
                 return;
         }
-        public void Close(){
+        public void Connect(){
                 return;
         }
     
     }
-    public class DB
-    {
-        public void Open(){
-            return;
-        }
-        public void Close(){
-                return;
-        }
-        public Transaction BeginTransaction(string txt){
-            Transaction tr = new Transaction();
-            return tr;
-        }
-    
-    }
+   
     public class C
     {
-        public DB db=new DB();
-
+        public Transaction tr = null;
+        public Transaction tr2;
         public void M(){
-            Transaction tr =  db.BeginTransaction(""SampleTransaction"");
+            tr.Connect();
+            tr2.Connect();
             tr.Commit();
             tr.Rollback();
-            db.Open();
-            if( true){
-                db.Close();
-            }
+            
            
         }
     }
 ";
             var dx = GetAnalyzerDiagnostics(code);
-            Assert.AreEqual(2, dx.Length);// one open db and not close it, second for both rollback and commit.
-            Assert.AreEqual(DBAnalyzer.PossibleEndOfScopeWithoutCloseId, dx[0].Id);
+            Assert.AreEqual(2, dx.Length);// one open Transaction and not doing commit/rollback, second for both rollback and commit.
+            Assert.AreEqual(TransactionAnalyzer.PossibleNotDoingRollbackOrCommitId, dx[0].Id);
+            Assert.AreEqual(TransactionAnalyzer.PossibleTwiceRollbackOrCommitId, dx[1].Id);
         }
 
         protected Diagnostic[] GetAnalyzerDiagnostics(string code)
         {
             var document = CreateDocument(code, LanguageNames.CSharp);
-            var analyzer = new DBAnalyzer();
+            var analyzer = new TransactionAnalyzer();
             var sys = document.Project.AddMetadataReference(MetadataReference.CreateFromFile(@"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.5.2\System.dll"));
             var compilerDiagnostics = sys.AddMetadataReference(MetadataReference.CreateFromFile(@"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.5.2\System.Data.dll")).GetCompilationAsync().Result.GetDiagnostics();
             //var compilerDiagnostics = document.Project.GetCompilationAsync().Result.GetDiagnostics();
@@ -85,7 +71,7 @@ namespace Test
 
         protected override DiagnosticAnalyzer GetCSharpDiagnosticAnalyzer()
         {
-            return new DBAnalyzer();
+            return new TransactionAnalyzer();
         }
     }
 }

@@ -9,28 +9,26 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using System.Reflection;
-using System.IO;
-using System.Data;
 
-namespace DB
+namespace Transaction
 {
-    internal class DBFlowState : FlowState
+    internal class TransactionFlowState : FlowState
     {
         private readonly SemanticModel model;
-        private readonly ImmutableDictionary<object, DBState> variableStates;
+        private readonly ImmutableDictionary<object, TransactionState> variableStates;
 
-        public DBFlowState(SemanticModel model)
-            : this(model, ImmutableDictionary.Create<object, DBState>(new VariableComparer(model)))
+        public TransactionFlowState(SemanticModel model)
+            : this(model, ImmutableDictionary.Create<object, TransactionState>(new VariableComparer(model)))
         {
         }
 
-        private DBFlowState(SemanticModel model, ImmutableDictionary<object, DBState> variableStates)
+        private TransactionFlowState(SemanticModel model, ImmutableDictionary<object, TransactionState> variableStates)
         {
             this.model = model;
             this.variableStates = variableStates;
         }
 
-        public ImmutableDictionary<object, DBState> VariableStates
+        public ImmutableDictionary<object, TransactionState> VariableStates
         {
             get
             {
@@ -38,11 +36,11 @@ namespace DB
             }
         }
 
-        private DBFlowState With(ImmutableDictionary<object, DBState> newVariableStates)
+        private TransactionFlowState With(ImmutableDictionary<object, TransactionState> newVariableStates)
         {
             if (this.variableStates != newVariableStates)
             {
-                return new DBFlowState(this.model, newVariableStates);
+                return new TransactionFlowState(this.model, newVariableStates);
             }
             else
             {
@@ -52,13 +50,13 @@ namespace DB
 
         public override bool Equals(FlowState state)
         {
-            var nfs = state as DBFlowState;
+            var nfs = state as TransactionFlowState;
             return nfs != null && nfs.variableStates == this.variableStates;
         }
 
         public override FlowState Join(FlowState state)
         {
-            var nfs = (DBFlowState)state;
+            var nfs = (TransactionFlowState)state;
             var joinedVariableStates = this.variableStates;
 
             Join(this.variableStates, nfs.variableStates, ref joinedVariableStates);
@@ -68,14 +66,14 @@ namespace DB
         }
 
         private void Join(
-            ImmutableDictionary<object, DBState> branchA,
-            ImmutableDictionary<object, DBState> branchB,
-            ref ImmutableDictionary<object, DBState> joined)
+            ImmutableDictionary<object, TransactionState> branchA,
+            ImmutableDictionary<object, TransactionState> branchB,
+            ref ImmutableDictionary<object, TransactionState> joined)
         {
             // for all items in a
             foreach (var kvp in branchA)
             {
-                DBState bs;
+                TransactionState bs;
                 if (!branchB.TryGetValue(kvp.Key, out bs))
                 {
                     bs = GetDeclaredState(kvp.Key);
@@ -87,96 +85,10 @@ namespace DB
             }
         }
 
-        private DBState Join(DBState a, DBState b)
-        {
-            switch (a)
-            {
-                case DBState.Unknown:
-                    switch (b)
-                    {
-                        case DBState.Unknown:
-                        case DBState.Connected:
-                        case DBState.Closed:
-                        case DBState.BeginTransaction:
-                            return DBState.Unknown;
-                    }
-                    break;
+        private TransactionState Join(TransactionState a, TransactionState b)
+        {    
 
-                case DBState.Connected:
-                    switch (b)
-                    {
-                        case DBState.Unknown:
-                        case DBState.BeginTransaction:
-                            return DBState.Unknown;
-                        case DBState.Connected:
-                            return DBState.Connected;
-                        case DBState.Closed:
-                            return DBState.Unknown;
-                    }
-                    break;
-
-                case DBState.Closed:
-                    switch (b)
-                    {
-                        case DBState.Unknown:
-                            return DBState.Unknown;
-                        case DBState.Closed:
-                            return DBState.Closed;
-                        case DBState.Connected:
-                        case DBState.BeginTransaction:
-                            return DBState.Unknown;
-                    }
-                    break;
-                    
-                case DBState.BeginTransaction:
-                    switch (b)
-                    {
-                        case DBState.Unknown:
-                        case DBState.Closed:
-                        case DBState.Connected:
-                            return DBState.Unknown;
-                        case DBState.BeginTransaction:
-                            return DBState.BeginTransaction;
-                    }
-                    break;
-                case DBState.Transaction:
-                    switch (b)
-                    {
-                        case DBState.CommitOrRollback:
-                            return DBState.UnknownTR;
-                        case DBState.Transaction:
-                            return DBState.Transaction;
-                        case DBState.TwiceCommitOrRollback:
-                            return DBState.UnknownTR;
-                    }
-                    break;
-                case DBState.CommitOrRollback:
-                    switch (b)
-                    {
-                        case DBState.CommitOrRollback:
-                            return DBState.CommitOrRollback;
-                        case DBState.Transaction:
-                            return DBState.UnknownTR;
-                        case DBState.TwiceCommitOrRollback:
-                            return DBState.UnknownTR;
-                    }
-                    break;
-                case DBState.TwiceCommitOrRollback:
-                    switch (b)
-                    {
-                        case DBState.CommitOrRollback:
-                            return DBState.UnknownTR;
-                        case DBState.Transaction:
-                            return DBState.UnknownTR;
-                        case DBState.TwiceCommitOrRollback:
-                            return DBState.TwiceCommitOrRollback;
-                    }
-                    break;
-                    
-
-            }
-
-            return DBState.Unknown;
+            return TransactionState.Unknown;
         }
 
         public override FlowState After(SyntaxNode node)
@@ -197,17 +109,7 @@ namespace DB
                     var symbol = this.model.GetDeclaredSymbol(node);
                     if (symbol != null)
                     {
-                        DBState stateRigth = GetReferenceState(declarator.Initializer.Value);
-                        switch (stateRigth)
-                        {
-                            case DBState.BeginTransaction:
-                                return this.WithReferenceState(symbol, DBState.Transaction);
-                                
-                        }
-                        return this.WithReferenceState(symbol, stateRigth);
-                            
-                        
-
+                        return this.WithReferenceState(symbol, GetReferenceState(declarator.Initializer.Value));
                     }
                 }
             }
@@ -265,21 +167,20 @@ namespace DB
             }
         }
 
-        public DBFlowState WithReferenceState(ISymbol symbol, DBState state)
+        public TransactionFlowState WithReferenceState(ISymbol symbol, TransactionState state)
         {
             switch (symbol.Kind)
             {
                 case SymbolKind.Local:
                 case SymbolKind.Parameter:
                 case SymbolKind.RangeVariable:
-
                     return this.With(this.variableStates.SetItem(symbol.OriginalDefinition, state));
                 default:
                     return this;
             }
         }
 
-        public DBFlowState WithReferenceState(ExpressionSyntax expr, DBState state)
+        public TransactionFlowState WithReferenceState(ExpressionSyntax expr, TransactionState state)
         {
             var variable = GetVariableExpression(expr);
             if (variable != null)
@@ -287,15 +188,6 @@ namespace DB
                 var expSymbol = this.model.GetSymbolInfo(variable).Symbol;
                 if (expSymbol != null)
                 {
-                    DBState currState;
-                    if (this.variableStates.TryGetValue(expSymbol.OriginalDefinition, out currState))
-                    {
-                        if (currState == DBState.CommitOrRollback && state == DBState.CommitOrRollback)
-                        {
-                            return this.With(this.variableStates.SetItem(expSymbol.OriginalDefinition, DBState.TwiceCommitOrRollback));
-                        }
-                    }
-                    
                     return this.With(this.variableStates.SetItem(expSymbol.OriginalDefinition, state));
                 }
             }
@@ -342,7 +234,7 @@ namespace DB
             return expr;
         }
 
-        public DBState GetAssignmentState(ExpressionSyntax variable, bool isInvocationParameter = false)
+        public TransactionState GetAssignmentState(ExpressionSyntax variable, bool isInvocationParameter = false)
         {
             var symbol = this.model.GetSymbolInfo(variable).Symbol;
             if (symbol != null)
@@ -351,29 +243,21 @@ namespace DB
             }
             else
             {
-                return DBState.Unknown;
+                return TransactionState.Unknown;
             }
         }
 
-        public DBState GetAssignmentState(ISymbol symbol, bool isInvocationParameter = false)
+        public TransactionState GetAssignmentState(ISymbol symbol, bool isInvocationParameter = false)
         {
             switch (symbol.Kind)
             {
                 case SymbolKind.Local:
-                    if(GetVariableType(symbol).ToString() == "Transaction")
-                    {
-                        return DBState.UnknownTR;
-                    }
-                    return DBState.Unknown;
+                    return TransactionState.Unknown;
                 case SymbolKind.Parameter:
                     if (!isInvocationParameter)
                     {
-                        if (GetVariableType(symbol).ToString() == "Transaction")
-                        {
-                            return DBState.UnknownTR;
-                        }
                         // method body parameters get their state assigned just like locals
-                        return DBState.Unknown;
+                        return TransactionState.Unknown;
                     }
                     else
                     {
@@ -384,14 +268,14 @@ namespace DB
             }
         }
 
-        public DBState GetReferenceState(ExpressionSyntax expression)
+        public TransactionState GetReferenceState(ExpressionSyntax expression)
         {
             if (expression != null)
             {
                 expression = WithoutParens(expression);
 
                 var expSymbol = this.model.GetSymbolInfo(expression).Symbol;
-                DBState state;
+                TransactionState state;
                 if (expSymbol != null && this.variableStates.TryGetValue(expSymbol.OriginalDefinition, out state))
                 {
                     return state;
@@ -401,7 +285,7 @@ namespace DB
                 {
 
                     case SyntaxKind.NullLiteralExpression:
-                        return DBState.Unknown;
+                        return TransactionState.Unknown;
 
                     case SyntaxKind.InvocationExpression:
                         var ourMethodName = ((MemberAccessExpressionSyntax)((InvocationExpressionSyntax)expression).Expression).Name;
@@ -414,23 +298,34 @@ namespace DB
                         );
                         var methodName = methodSymbol.Name;
                      
-                        if (declaringTypeName == "<global namespace>.DB" && ourMethodName.Identifier.ValueText.StartsWith("Create") || ourMethodName.Identifier.ValueText.StartsWith("Open"))
-                        {
-                            return DBState.Connected;
-                        }
-                        if (declaringTypeName == "<global namespace>.DB" && ourMethodName.Identifier.ValueText.StartsWith("BeginTransaction"))
-                        {
-                            return DBState.BeginTransaction;
-                        }
-                       
-                        if (declaringTypeName == "<global namespace>.DB" && ourMethodName.Identifier.ValueText.StartsWith("Close"))
-                        {
-                            return DBState.Closed;
-                        }
-                        if (declaringTypeName == "<global namespace>.Transaction" && (ourMethodName.Identifier.ValueText.StartsWith("Commit") || ourMethodName.Identifier.ValueText.StartsWith("Rollback")))
-                        {
-                            return DBState.CommitOrRollback;
-                        }
+                       if (declaringTypeName == "<global namespace>.Transaction" && ourMethodName.Identifier.ValueText.StartsWith("Connect"))
+                       {
+                             return TransactionState.Connected;
+                       }
+                       if (declaringTypeName == "<global namespace>.Transaction" && ourMethodName.Identifier.ValueText.StartsWith("Rollback"))
+                       {
+                             return TransactionState.Rollback;
+                       }
+                       if (declaringTypeName == "<global namespace>.Transaction" && ourMethodName.Identifier.ValueText.StartsWith("Commit"))
+                       {
+                             return TransactionState.Commit;
+                       }
+                       if (declaringTypeName == "global namespace>.Transaction" && ourMethodName.Identifier.ValueText.StartsWith("Rollback"))
+                       {
+                             return TransactionState.Rollback;
+                       }
+                       if (declaringTypeName == "<global namespace>.Transaction" && ourMethodName.Identifier.ValueText.StartsWith("Commit"))
+                       {
+                             return TransactionState.Commit;
+                       }
+                       if (declaringTypeName == "global namespace>.Transaction" && ourMethodName.Identifier.ValueText.StartsWith("Rollback"))
+                       {
+                             return TransactionState.Rollback;
+                       }
+                       if (declaringTypeName == "<global namespace>.Transaction" && ourMethodName.Identifier.ValueText.StartsWith("Commit"))
+                       {
+                             return TransactionState.Commit;
+                       }
 
                         return GetReferenceState(((MemberAccessExpressionSyntax)((InvocationExpressionSyntax)expression).Expression).Expression);
 
@@ -446,12 +341,11 @@ namespace DB
                 }
             }
 
-            return DBState.Unknown;
+            return TransactionState.Unknown;
         }
-
-        public DBState GetReferenceState(ISymbol symbol)
+        public TransactionState GetReferenceState(ISymbol symbol)
         {
-            DBState state;
+            TransactionState state;
             if (this.variableStates.TryGetValue(symbol.OriginalDefinition, out state))
             {
                 return state;
@@ -460,7 +354,7 @@ namespace DB
             return GetDeclaredState(symbol);
         }
 
-        public DBState GetDeclaredState(object symbolOrSyntax)
+        public TransactionState GetDeclaredState(object symbolOrSyntax)
         {
             var syntax = symbolOrSyntax as ExpressionSyntax;
             if (syntax != null)
@@ -474,10 +368,10 @@ namespace DB
                 return GetDeclaredState(symbol);
             }
 
-            return DBState.Unknown;
+            return TransactionState.Unknown;
         }
 
-        public DBState GetDeclaredState(ExpressionSyntax syntax)
+        public TransactionState GetDeclaredState(ExpressionSyntax syntax)
         {
             var symbol = this.model.GetSymbolInfo(syntax).Symbol;
             if (symbol != null)
@@ -486,34 +380,30 @@ namespace DB
             }
             else
             {
-                return DBState.Unknown;
+                return TransactionState.Unknown;
             }
         }
 
-        public static DBState GetDeclaredState(ISymbol symbol)
+        public static TransactionState GetDeclaredState(ISymbol symbol)
         {
             switch (symbol.Kind)
             {
                 case SymbolKind.Local:
-                    if (GetVariableType(symbol).ToString() == "Transaction")
-                    {
-                        return DBState.UnknownTR;
-                    }
-                    return DBState.Unknown;
+                    return TransactionState.Unknown;
+
                 default:
-                    return GetSymbolInfo(symbol).FileState;
+                    return GetSymbolInfo(symbol).TransactionState;
             }
         }
 
 
-
         private class SymbolInfo
         {
-            public readonly DBState FileState;
+            public readonly TransactionState TransactionState;
 
-            public SymbolInfo(DBState defaultState)
+            public SymbolInfo(TransactionState defaultState)
             {
-                this.FileState = defaultState;
+                this.TransactionState = defaultState;
             }
         }
 
@@ -534,68 +424,8 @@ namespace DB
 
         private static SymbolInfo CreateSymbolInfo(ISymbol symbol)
         {
-            // check if it can possibly be null
-            //var type = GetVariableType(symbol);
-            //if (type != null)
-            //{
-            //    var possibleToBeNull = type.IsReferenceType
-            //        || type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
-            //    if (!possibleToBeNull)
-            //    {
-            //        return new SymbolInfo(NullState.NotNull);
-            //    }
-            //}
-
-            //// check any explicit attributes
-            //ImmutableArray<AttributeData> attrs;
-            //switch (symbol.Kind)
-            //{
-            //    case SymbolKind.Method:
-            //        attrs = ((IMethodSymbol)symbol).GetReturnTypeAttributes();
-            //        break;
-
-            //    default:
-            //        attrs = symbol.GetAttributes();
-            //        break;
-            //}
-
-            //NullState state;
-            //if (!TryGetAttributedState(attrs, out state))
-            //{
-            //    // if defaulted to null, then obviously it could be null!
-            //    if (symbol.Kind == SymbolKind.Parameter)
-            //    {
-            //        var ps = (IParameterSymbol)symbol;
-            //        if (ps.HasExplicitDefaultValue && ps.ExplicitDefaultValue == null)
-            //        {
-            //            return new SymbolInfo(NullState.CouldBeNull);
-            //        }
-            //    }
-
-            //    // otherwise try to pickup default from assembly level attribute
-            //    if (symbol.Kind != SymbolKind.Assembly)
-            //    {
-            //        state = GetSymbolInfo(symbol.ContainingAssembly).NullState;
-            //    }
-            //}
-
-            //var closeSymbol = this.model.GetSymbolInfo().Symbol as IMethodSymbol;
-            Type fileStreamType = Type.GetType("System.IO.FileStream");
-            MethodInfo closeMethodInfo = fileStreamType.GetRuntimeMethod("Close", new Type[0]);
-
-            //if (symbol.Name.StartsWith("Close"))
-            //{
-            //    return new SymbolInfo(NullState.Closed);
-            //}
-            //if (symbol.Name.StartsWith("Create") || symbol.Name.StartsWith("Open"))
-            //{
-            //    return new SymbolInfo(NullState.Opened);
-            //}
-            if (symbol.OriginalDefinition.ContainingType.ToString() == "Transaction")
-            {
-                return new SymbolInfo(DBState.UnknownTR);
-            }
-            return new SymbolInfo(DBState.Unknown);
+            
+            return new SymbolInfo(TransactionState.Unknown);
         }
 
         private static ITypeSymbol GetVariableType(ISymbol symbol)

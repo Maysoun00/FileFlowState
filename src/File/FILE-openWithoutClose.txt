@@ -1,0 +1,31 @@
+using System.IO;
+using System;
+
+
+Analysis Name: PossibleReadWithoutOpen
+ID: "NN0001"
+title: "Possible read of scope without open it"
+Analysis message: "possible trying to read IO Stream file without opened it."
+type: Warning
+ReportStates:
+ReportsMethods: <Closed-Read>,<Unknown-Read>
+
+States{
+
+Unknown, S
+Opened,
+Closed,
+}
+
+
+Connections{
+
+Unknown,System.IO.File.Open,Opened
+Opened,System.IO.File.Open,Opened
+Unknown,System.IO.File.Create,Opened
+Opened,System.IO.File.Create,Opened
+Opened,System.IO.Stream.Close,Closed
+Closed,System.IO.Stream.Close,Closed
+Opened,System.IO.FileStream.Read,Opened
+
+}

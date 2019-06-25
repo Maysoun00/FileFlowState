@@ -8,9 +8,8 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
-using System.Data;
 
-namespace DB
+namespace Transaction
 {
     /// <summary>
     /// Analyzises a block of code for state transitions across code flow
@@ -65,7 +64,7 @@ namespace DB
             while (this.joinStates.Count > 0)
             {
                 var lastJoinStates = this.joinStates;
-                //this.DoAnalysis(node);
+                this.DoAnalysis(node);
                 if (lastJoinStates == this.joinStates || (revists++) < 10)
                 {
                     break;

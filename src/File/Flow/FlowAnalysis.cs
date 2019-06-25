@@ -2,9 +2,8 @@
 using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
-using System.Data;
 
-namespace DB
+namespace Transaction
 {
     public class FlowAnalysis<TState>
         where TState : FlowState

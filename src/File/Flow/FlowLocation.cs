@@ -4,9 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
-using System.Data;
 
-namespace DB
+namespace Transaction
 {
     public struct FlowLocation : IEquatable<FlowLocation>, IComparable<FlowLocation>
     {

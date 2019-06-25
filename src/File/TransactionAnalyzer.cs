@@ -8,46 +8,35 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
-using System.Data;
 
-namespace DB
+namespace Transaction
 {
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
-    public class DBAnalyzer : DiagnosticAnalyzer
+    public class TransactionAnalyzer : DiagnosticAnalyzer
     {
-        public const string PossibleEndOfScopeWithoutCloseId = "NN0001";
-        public const string PossibleEndOfScopeWithoutRoolbackOrCommitId = "NN0002";
-        public const string PossibleTwiceRoolbackOrCommitId = "NN0003";
 
-        internal static DiagnosticDescriptor PossibleEndOfScopeWithoutClose =
-           new DiagnosticDescriptor(
-                id: PossibleEndOfScopeWithoutCloseId,
-                title: "Possible end of scope without close",
-                messageFormat: "Possible end of scope without closing a DB connection.",
-                category: "DB",
-                defaultSeverity: DiagnosticSeverity.Warning,
-                isEnabledByDefault: true);
+      public const string PossibleNotDoingRollbackOrCommitId = "NN0001";
+      public const string PossibleTwiceRollbackOrCommitId = "NN0002";
 
-        internal static DiagnosticDescriptor PossibleEndOfScopeWithoutRoolbackOrCommit =
-           new DiagnosticDescriptor(
-                id: PossibleEndOfScopeWithoutRoolbackOrCommitId,
-                title: "Possible end of scope without commit/rollback",
-                messageFormat: "Possible end of scope without commit/rollback a DB transaction.",
-                category: "DB",
-                defaultSeverity: DiagnosticSeverity.Warning,
-                isEnabledByDefault: true);
-
-        internal static DiagnosticDescriptor PossibleTwiceRoolbackOrCommit =
-           new DiagnosticDescriptor(
-                id: PossibleTwiceRoolbackOrCommitId,
-                title: "Possible twice of commit/rollback",
-                messageFormat: "Possible twice of commit/rollback a DB transaction.",
-                category: "DB",
-                defaultSeverity: DiagnosticSeverity.Warning,
-                isEnabledByDefault: true);
+      internal static DiagnosticDescriptor PossibleNotDoingRollbackOrCommit =
+          new DiagnosticDescriptor(
+              id: PossibleNotDoingRollbackOrCommitId,
+              title: "optional didn't rollback/commit",
+              messageFormat: "The Transaction stayed connected without any rollback/commit",
+              category: "Transaction",
+              defaultSeverity: DiagnosticSeverity.Warning,
+              isEnabledByDefault: true);
+      internal static DiagnosticDescriptor PossibleTwiceRollbackOrCommit =
+          new DiagnosticDescriptor(
+              id: PossibleTwiceRollbackOrCommitId,
+              title:  "optional doing commit/rollback twice",
+              messageFormat: "The transaction may rollback or commit more than once",
+              category: "Transaction",
+              defaultSeverity: DiagnosticSeverity.Warning,
+              isEnabledByDefault: true);
 
         private static readonly ImmutableArray<DiagnosticDescriptor> s_supported =
-            ImmutableArray.Create(PossibleEndOfScopeWithoutClose, PossibleEndOfScopeWithoutRoolbackOrCommit, PossibleTwiceRoolbackOrCommit);
+            ImmutableArray.Create(PossibleNotDoingRollbackOrCommit, PossibleTwiceRollbackOrCommit);
 
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
         {
@@ -67,7 +56,7 @@ namespace DB
         private class CodeBlockAnalyzer : CSharpSyntaxWalker
         {
             private readonly CodeBlockAnalysisContext context;
-            private FlowAnalysis<DBFlowState> flowAnalysis;
+            private FlowAnalysis<TransactionFlowState> flowAnalysis;
 
             public CodeBlockAnalyzer(CodeBlockAnalysisContext context)
             {
@@ -77,7 +66,7 @@ namespace DB
             public void Analyze(SyntaxNode node)
             {
                 // do null flow analysis
-                var flowAnalzyer = new FlowAnalyzer<DBFlowState>(this.context.SemanticModel, new DBFlowState(this.context.SemanticModel));
+                var flowAnalzyer = new FlowAnalyzer<TransactionFlowState>(this.context.SemanticModel, new TransactionFlowState(this.context.SemanticModel));
                 this.flowAnalysis = flowAnalzyer.Analyze(node);
 
                 // check assignments and dereferences and report diagnostics
@@ -86,23 +75,15 @@ namespace DB
                 var state = this.flowAnalysis.GetFlowState(node);
                 foreach(var variableState in state.VariableStates)
                 {
-                    if(variableState.Value == DBState.Unknown || variableState.Value == DBState.Connected)
-                    {
-                        context.ReportDiagnostic(Diagnostic.Create(PossibleEndOfScopeWithoutClose, node.GetLocation())); // TODO: warning in very wrong location GetLocations?!
-                    }
-                    if(variableState.Value == DBState.Transaction)
-                    {
-                        context.ReportDiagnostic(Diagnostic.Create(PossibleEndOfScopeWithoutRoolbackOrCommit, node.GetLocation())); 
-                    }
-                    if(variableState.Value == DBState.TwiceCommitOrRollback)
-                    {
-                        context.ReportDiagnostic(Diagnostic.Create(PossibleTwiceRoolbackOrCommit, node.GetLocation()));
-                    }
+                     if(variableState.Value == TransactionState.Connected || variableState.Value == TransactionState.Unknown)
+                     {
+                          context.ReportDiagnostic(Diagnostic.Create(PossibleNotDoingRollbackOrCommit, node.GetLocation()));
+                     }
                 }
 
             }
 
-            private DBState GetReferenceState(ExpressionSyntax expression)
+            private TransactionState GetReferenceState(ExpressionSyntax expression)
             {
                 var state = this.flowAnalysis.GetFlowState(expression);
                 return state.GetReferenceState(expression);
@@ -176,19 +157,6 @@ namespace DB
             {
                 base.VisitMemberAccessExpression(node);
 
-                // check for possible dereference of null on member access (dot)
-                //var state = this.flowAnalysis.GetFlowState(node.Expression);
-                //switch (state.GetReferenceState(node.Expression))
-                //{
-                //    case NullState.Closed:
-                //    case NullState.Unknown:
-                //        var method = context.SemanticModel.GetSymbolInfo(node).Symbol as IMethodSymbol;
-                //        if (!method.Name.StartsWith("Open") && !method.Name.StartsWith("Close") && !method.Name.StartsWith("Create"))
-                //        {
-                //            context.ReportDiagnostic(Diagnostic.Create(PossibleReadWithoutOpen, node.GetLocation()));//get more accurate location
-                //        }
-                //        break;
-                //}
             }
 
             public override void VisitAssignmentExpression(AssignmentExpressionSyntax node)
@@ -211,7 +179,7 @@ namespace DB
                 CheckAssignment(state.GetAssignmentState(symbol, isInvocationParameter), exprState, expression);
             }
 
-            private void CheckAssignment(DBState variableState, DBState expressionState, ExpressionSyntax expression)
+            private void CheckAssignment(TransactionState variableState, TransactionState expressionState, ExpressionSyntax expression)
             {
                 
             }
@@ -236,22 +204,29 @@ namespace DB
    
                 // check for possible dereference of null on member access (dot)
                 var state = this.flowAnalysis.GetFlowState(node.Expression);
+                var method = context.SemanticModel.GetSymbolInfo(node).Symbol as IMethodSymbol;
                 switch (state.GetReferenceState(((MemberAccessExpressionSyntax)node.Expression).Expression))
                 {
-                    //case DBState.Closed:
-                    //case DBState.Unknown:
-                      //  var method = context.SemanticModel.GetSymbolInfo(node).Symbol as IMethodSymbol;
-                       // if (!method.Name.StartsWith("Open") && !method.Name.StartsWith("Close") && !method.Name.StartsWith("Create"))
-                       // {
-                         //   context.ReportDiagnostic(Diagnostic.Create(PossibleReadWithoutOpen, node.GetLocation()));//get more accurate location
-                       // }                                
-                        //break;            
+
+                      case TransactionState.Unknown:
+                            break;
+                      case TransactionState.Connected:
+                            break;
+                      case TransactionState.Rollback:
+                           if (method.Name.StartsWith("Rollback") || method.Name.StartsWith("Commit"))
+                            {
+                             context.ReportDiagnostic(Diagnostic.Create(PossibleTwiceRollbackOrCommit, node.GetLocation()));
+                            }
+                            break;
+                      case TransactionState.Commit:
+                           if (method.Name.StartsWith("Commit") || method.Name.StartsWith("Rollback"))
+                            {
+                             context.ReportDiagnostic(Diagnostic.Create(PossibleTwiceRollbackOrCommit, node.GetLocation()));
+                            }
+                            break;
                 }
 
-                //if (method != null)
-                //{
-                //    CheckArguments(node.ArgumentList.Arguments, method.Parameters);
-                //}
+                
             }
 
             public override void VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
