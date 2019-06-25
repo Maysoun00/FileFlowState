@@ -1,0 +1,45 @@
+using System.IO;
+using System;
+
+
+Analysis Name: PossibleReadWithoutOpen
+ID: "NN0001"
+title: "Possible read of scope without open it"
+Analysis message: "possible trying to read IO Stream file without opened it."
+type: Warning
+ReportsMethods: <Closed-Read>,<Unknown-Read>
+
+Analysis Name: PossibleUnClosedFile
+ID: "NN0002"
+title: "Possible end of block without closing a file"
+Analysis message: "possible end of block with file unclosed."
+type: Warning
+ReportStates: Unknown, Opened
+
+Analysis Name: PossibleWriteWithoutOpen
+ID: "NN0003"
+title: "Possible write of scope without open it"
+Analysis message: "possible trying writing to IO Stream file without opened it."
+type: Warning
+ReportsMethods: <Closed-Write>,<Unknown-Write>
+
+States{
+
+Unknown, S
+Opened,
+Closed,
+}
+
+
+Connections{
+
+
+Unknown,System.IO.File.Create,Opened
+Opened,System.IO.File.Create,Opened
+Opened,System.IO.Stream.Close,Closed
+Closed,System.IO.Stream.Close,Closed
+Opened,System.IO.FileStream.Read,Opened
+Opened,System.IO.FileStream.Write,Opened
+
+
+}

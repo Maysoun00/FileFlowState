@@ -9,27 +9,26 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using System.Reflection;
-***UsingOptions***
 
-namespace ***AnalyzerField***
+namespace Transaction
 {
-    internal class ***AnalyzerField***FlowState : FlowState
+    internal class TransactionFlowState : FlowState
     {
         private readonly SemanticModel model;
-        private readonly ImmutableDictionary<object, ***AnalyzerField***State> variableStates;
+        private readonly ImmutableDictionary<object, TransactionState> variableStates;
 
-        public ***AnalyzerField***FlowState(SemanticModel model)
-            : this(model, ImmutableDictionary.Create<object, ***AnalyzerField***State>(new VariableComparer(model)))
+        public TransactionFlowState(SemanticModel model)
+            : this(model, ImmutableDictionary.Create<object, TransactionState>(new VariableComparer(model)))
         {
         }
 
-        private ***AnalyzerField***FlowState(SemanticModel model, ImmutableDictionary<object, ***AnalyzerField***State> variableStates)
+        private TransactionFlowState(SemanticModel model, ImmutableDictionary<object, TransactionState> variableStates)
         {
             this.model = model;
             this.variableStates = variableStates;
         }
 
-        public ImmutableDictionary<object, ***AnalyzerField***State> VariableStates
+        public ImmutableDictionary<object, TransactionState> VariableStates
         {
             get
             {
@@ -37,11 +36,11 @@ namespace ***AnalyzerField***
             }
         }
 
-        private ***AnalyzerField***FlowState With(ImmutableDictionary<object, ***AnalyzerField***State> newVariableStates)
+        private TransactionFlowState With(ImmutableDictionary<object, TransactionState> newVariableStates)
         {
             if (this.variableStates != newVariableStates)
             {
-                return new ***AnalyzerField***FlowState(this.model, newVariableStates);
+                return new TransactionFlowState(this.model, newVariableStates);
             }
             else
             {
@@ -51,13 +50,13 @@ namespace ***AnalyzerField***
 
         public override bool Equals(FlowState state)
         {
-            var nfs = state as ***AnalyzerField***FlowState;
+            var nfs = state as TransactionFlowState;
             return nfs != null && nfs.variableStates == this.variableStates;
         }
 
         public override FlowState Join(FlowState state)
         {
-            var nfs = (***AnalyzerField***FlowState)state;
+            var nfs = (TransactionFlowState)state;
             var joinedVariableStates = this.variableStates;
 
             Join(this.variableStates, nfs.variableStates, ref joinedVariableStates);
@@ -67,14 +66,14 @@ namespace ***AnalyzerField***
         }
 
         private void Join(
-            ImmutableDictionary<object, ***AnalyzerField***State> branchA,
-            ImmutableDictionary<object, ***AnalyzerField***State> branchB,
-            ref ImmutableDictionary<object, ***AnalyzerField***State> joined)
+            ImmutableDictionary<object, TransactionState> branchA,
+            ImmutableDictionary<object, TransactionState> branchB,
+            ref ImmutableDictionary<object, TransactionState> joined)
         {
             // for all items in a
             foreach (var kvp in branchA)
             {
-                ***AnalyzerField***State bs;
+                TransactionState bs;
                 if (!branchB.TryGetValue(kvp.Key, out bs))
                 {
                     bs = GetDeclaredState(kvp.Key);
@@ -86,10 +85,10 @@ namespace ***AnalyzerField***
             }
         }
 
-        private ***AnalyzerField***State Join(***AnalyzerField***State a, ***AnalyzerField***State b)
+        private TransactionState Join(TransactionState a, TransactionState b)
         {    
 
-            return ***AnalyzerField***State.***FirstState***;
+            return TransactionState.Unknown;
         }
 
         public override FlowState After(SyntaxNode node)
@@ -168,7 +167,7 @@ namespace ***AnalyzerField***
             }
         }
 
-        public ***AnalyzerField***FlowState WithReferenceState(ISymbol symbol, ***AnalyzerField***State state)
+        public TransactionFlowState WithReferenceState(ISymbol symbol, TransactionState state)
         {
             switch (symbol.Kind)
             {
@@ -181,7 +180,7 @@ namespace ***AnalyzerField***
             }
         }
 
-        public ***AnalyzerField***FlowState WithReferenceState(ExpressionSyntax expr, ***AnalyzerField***State state)
+        public TransactionFlowState WithReferenceState(ExpressionSyntax expr, TransactionState state)
         {
             var variable = GetVariableExpression(expr);
             if (variable != null)
@@ -235,7 +234,7 @@ namespace ***AnalyzerField***
             return expr;
         }
 
-        public ***AnalyzerField***State GetAssignmentState(ExpressionSyntax variable, bool isInvocationParameter = false)
+        public TransactionState GetAssignmentState(ExpressionSyntax variable, bool isInvocationParameter = false)
         {
             var symbol = this.model.GetSymbolInfo(variable).Symbol;
             if (symbol != null)
@@ -244,21 +243,21 @@ namespace ***AnalyzerField***
             }
             else
             {
-                return ***AnalyzerField***State.***FirstState***;
+                return TransactionState.Unknown;
             }
         }
 
-        public ***AnalyzerField***State GetAssignmentState(ISymbol symbol, bool isInvocationParameter = false)
+        public TransactionState GetAssignmentState(ISymbol symbol, bool isInvocationParameter = false)
         {
             switch (symbol.Kind)
             {
                 case SymbolKind.Local:
-                    return ***AnalyzerField***State.***FirstState***;
+                    return TransactionState.Unknown;
                 case SymbolKind.Parameter:
                     if (!isInvocationParameter)
                     {
                         // method body parameters get their state assigned just like locals
-                        return ***AnalyzerField***State.***FirstState***;
+                        return TransactionState.Unknown;
                     }
                     else
                     {
@@ -269,14 +268,14 @@ namespace ***AnalyzerField***
             }
         }
 
-        public ***AnalyzerField***State GetReferenceState(ExpressionSyntax expression)
+        public TransactionState GetReferenceState(ExpressionSyntax expression)
         {
             if (expression != null)
             {
                 expression = WithoutParens(expression);
 
                 var expSymbol = this.model.GetSymbolInfo(expression).Symbol;
-                ***AnalyzerField***State state;
+                TransactionState state;
                 if (expSymbol != null && this.variableStates.TryGetValue(expSymbol.OriginalDefinition, out state))
                 {
                     return state;
@@ -286,7 +285,7 @@ namespace ***AnalyzerField***
                 {
 
                     case SyntaxKind.NullLiteralExpression:
-                        return ***AnalyzerField***State.***FirstState***;
+                        return TransactionState.Unknown;
 
                     case SyntaxKind.InvocationExpression:
                         var ourMethodName = ((MemberAccessExpressionSyntax)((InvocationExpressionSyntax)expression).Expression).Name;
@@ -299,7 +298,34 @@ namespace ***AnalyzerField***
                         );
                         var methodName = methodSymbol.Name;
                      
-                        ***OptionalInvocationMethods***
+                       if (declaringTypeName == "<global namespace>.Transaction" && ourMethodName.Identifier.ValueText.StartsWith("Connect"))
+                       {
+                             return TransactionState.Connected;
+                       }
+                       if (declaringTypeName == "<global namespace>.Transaction" && ourMethodName.Identifier.ValueText.StartsWith("Rollback"))
+                       {
+                             return TransactionState.Rollback;
+                       }
+                       if (declaringTypeName == "<global namespace>.Transaction" && ourMethodName.Identifier.ValueText.StartsWith("Commit"))
+                       {
+                             return TransactionState.Commit;
+                       }
+                       if (declaringTypeName == "global namespace>.Transaction" && ourMethodName.Identifier.ValueText.StartsWith("Rollback"))
+                       {
+                             return TransactionState.Rollback;
+                       }
+                       if (declaringTypeName == "<global namespace>.Transaction" && ourMethodName.Identifier.ValueText.StartsWith("Commit"))
+                       {
+                             return TransactionState.Commit;
+                       }
+                       if (declaringTypeName == "global namespace>.Transaction" && ourMethodName.Identifier.ValueText.StartsWith("Rollback"))
+                       {
+                             return TransactionState.Rollback;
+                       }
+                       if (declaringTypeName == "<global namespace>.Transaction" && ourMethodName.Identifier.ValueText.StartsWith("Commit"))
+                       {
+                             return TransactionState.Commit;
+                       }
 
                         return GetReferenceState(((MemberAccessExpressionSyntax)((InvocationExpressionSyntax)expression).Expression).Expression);
 
@@ -315,11 +341,11 @@ namespace ***AnalyzerField***
                 }
             }
 
-            return ***AnalyzerField***State.***FirstState***;
+            return TransactionState.Unknown;
         }
-        public ***AnalyzerField***State GetReferenceState(ISymbol symbol)
+        public TransactionState GetReferenceState(ISymbol symbol)
         {
-            ***AnalyzerField***State state;
+            TransactionState state;
             if (this.variableStates.TryGetValue(symbol.OriginalDefinition, out state))
             {
                 return state;
@@ -328,7 +354,7 @@ namespace ***AnalyzerField***
             return GetDeclaredState(symbol);
         }
 
-        public ***AnalyzerField***State GetDeclaredState(object symbolOrSyntax)
+        public TransactionState GetDeclaredState(object symbolOrSyntax)
         {
             var syntax = symbolOrSyntax as ExpressionSyntax;
             if (syntax != null)
@@ -342,10 +368,10 @@ namespace ***AnalyzerField***
                 return GetDeclaredState(symbol);
             }
 
-            return ***AnalyzerField***State.***FirstState***;
+            return TransactionState.Unknown;
         }
 
-        public ***AnalyzerField***State GetDeclaredState(ExpressionSyntax syntax)
+        public TransactionState GetDeclaredState(ExpressionSyntax syntax)
         {
             var symbol = this.model.GetSymbolInfo(syntax).Symbol;
             if (symbol != null)
@@ -354,30 +380,30 @@ namespace ***AnalyzerField***
             }
             else
             {
-                return ***AnalyzerField***State.***FirstState***;
+                return TransactionState.Unknown;
             }
         }
 
-        public static ***AnalyzerField***State GetDeclaredState(ISymbol symbol)
+        public static TransactionState GetDeclaredState(ISymbol symbol)
         {
             switch (symbol.Kind)
             {
                 case SymbolKind.Local:
-                    return ***AnalyzerField***State.***FirstState***;
+                    return TransactionState.Unknown;
 
                 default:
-                    return GetSymbolInfo(symbol).***AnalyzerField***State;
+                    return GetSymbolInfo(symbol).TransactionState;
             }
         }
 
 
         private class SymbolInfo
         {
-            public readonly ***AnalyzerField***State ***AnalyzerField***State;
+            public readonly TransactionState TransactionState;
 
-            public SymbolInfo(***AnalyzerField***State defaultState)
+            public SymbolInfo(TransactionState defaultState)
             {
-                this.***AnalyzerField***State = defaultState;
+                this.TransactionState = defaultState;
             }
         }
 
@@ -399,7 +425,7 @@ namespace ***AnalyzerField***
         private static SymbolInfo CreateSymbolInfo(ISymbol symbol)
         {
             
-            return new SymbolInfo(***AnalyzerField***State.***FirstState***);
+            return new SymbolInfo(TransactionState.Unknown);
         }
 
         private static ITypeSymbol GetVariableType(ISymbol symbol)

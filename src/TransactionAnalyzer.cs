@@ -8,20 +8,35 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
-***UsingOptions***
 
-namespace ***AnalyzerField***
+namespace Transaction
 {
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
-    public class ***AnalyzerField***Analyzer : DiagnosticAnalyzer
+    public class TransactionAnalyzer : DiagnosticAnalyzer
     {
 
-        ***StringAnalysisID***
+      public const string PossibleNotDoingRollbackOrCommitId = "NN0001";
+      public const string PossibleTwiceRollbackOrCommitId = "NN0002";
 
-	***DiagnosticDescriptor***
+      internal static DiagnosticDescriptor PossibleNotDoingRollbackOrCommit =
+          new DiagnosticDescriptor(
+              id: PossibleNotDoingRollbackOrCommitId,
+              title: "optional didn't rollback/commit",
+              messageFormat: "The Transaction stayed connected without any rollback/commit",
+              category: "Transaction",
+              defaultSeverity: DiagnosticSeverity.Warning,
+              isEnabledByDefault: true);
+      internal static DiagnosticDescriptor PossibleTwiceRollbackOrCommit =
+          new DiagnosticDescriptor(
+              id: PossibleTwiceRollbackOrCommitId,
+              title:  "optional doing commit/rollback twice",
+              messageFormat: "The transaction may rollback or commit more than once",
+              category: "Transaction",
+              defaultSeverity: DiagnosticSeverity.Warning,
+              isEnabledByDefault: true);
 
         private static readonly ImmutableArray<DiagnosticDescriptor> s_supported =
-            ImmutableArray.Create(***NamesOfAnalysis***);
+            ImmutableArray.Create(PossibleNotDoingRollbackOrCommit, PossibleTwiceRollbackOrCommit);
 
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
         {
@@ -41,7 +56,7 @@ namespace ***AnalyzerField***
         private class CodeBlockAnalyzer : CSharpSyntaxWalker
         {
             private readonly CodeBlockAnalysisContext context;
-            private FlowAnalysis<***AnalyzerField***FlowState> flowAnalysis;
+            private FlowAnalysis<TransactionFlowState> flowAnalysis;
 
             public CodeBlockAnalyzer(CodeBlockAnalysisContext context)
             {
@@ -51,7 +66,7 @@ namespace ***AnalyzerField***
             public void Analyze(SyntaxNode node)
             {
                 // do null flow analysis
-                var flowAnalzyer = new FlowAnalyzer<***AnalyzerField***FlowState>(this.context.SemanticModel, new ***AnalyzerField***FlowState(this.context.SemanticModel));
+                var flowAnalzyer = new FlowAnalyzer<TransactionFlowState>(this.context.SemanticModel, new TransactionFlowState(this.context.SemanticModel));
                 this.flowAnalysis = flowAnalzyer.Analyze(node);
 
                 // check assignments and dereferences and report diagnostics
@@ -60,12 +75,15 @@ namespace ***AnalyzerField***
                 var state = this.flowAnalysis.GetFlowState(node);
                 foreach(var variableState in state.VariableStates)
                 {
-                    ***ReportingDiagnosticIfs***
+                     if(variableState.Value == TransactionState.Connected || variableState.Value == TransactionState.Unknown)
+                     {
+                          context.ReportDiagnostic(Diagnostic.Create(PossibleNotDoingRollbackOrCommit, node.GetLocation()));
+                     }
                 }
 
             }
 
-            private ***AnalyzerField***State GetReferenceState(ExpressionSyntax expression)
+            private TransactionState GetReferenceState(ExpressionSyntax expression)
             {
                 var state = this.flowAnalysis.GetFlowState(expression);
                 return state.GetReferenceState(expression);
@@ -161,7 +179,7 @@ namespace ***AnalyzerField***
                 CheckAssignment(state.GetAssignmentState(symbol, isInvocationParameter), exprState, expression);
             }
 
-            private void CheckAssignment(***AnalyzerField***State variableState, ***AnalyzerField***State expressionState, ExpressionSyntax expression)
+            private void CheckAssignment(TransactionState variableState, TransactionState expressionState, ExpressionSyntax expression)
             {
                 
             }
@@ -190,7 +208,22 @@ namespace ***AnalyzerField***
                 switch (state.GetReferenceState(((MemberAccessExpressionSyntax)node.Expression).Expression))
                 {
 
-                    ***ReportingInvalidInvocation***
+                      case TransactionState.Unknown:
+                            break;
+                      case TransactionState.Connected:
+                            break;
+                      case TransactionState.Rollback:
+                           if (method.Name.StartsWith("Rollback") || method.Name.StartsWith("Commit"))
+                            {
+                             context.ReportDiagnostic(Diagnostic.Create(PossibleTwiceRollbackOrCommit, node.GetLocation()));
+                            }
+                            break;
+                      case TransactionState.Commit:
+                           if (method.Name.StartsWith("Commit") || method.Name.StartsWith("Rollback"))
+                            {
+                             context.ReportDiagnostic(Diagnostic.Create(PossibleTwiceRollbackOrCommit, node.GetLocation()));
+                            }
+                            break;
                 }
 
                 

@@ -14,6 +14,8 @@ AnalyzerName = sys.argv[1]
 usings = []
 states = []
 analysisNames= []
+analysisStatesNames =[]
+analysisMethodsNames= []
 analysisIDs = []
 analysisTitles =[]
 analysisErrorTypes = []
@@ -23,6 +25,7 @@ startState = ""
 statesScope = "false"
 edgesScope = "false"
 funcs = []
+analysisesMethodReports = []
 
 for line in graph:
     if re.search("Analysis Name:", line):
@@ -36,10 +39,13 @@ for line in graph:
     if re.search("type:", line):
         analysisErrorTypes.append(line.split(": ")[1].split("\n")[0])
     if re.search("ReportStates:", line):
-        if len(line.split(": ")) == 1 :
-            print("Bad states cant be empty")
-            exit()
-        analysisesBadStates.append(line.split(": ")[1].split("\n")[0])
+        if len(line.split(": ")) != 1 :
+            analysisesBadStates.append(line.split(": ")[1].split("\n")[0])
+            analysisStatesNames.append(analysisNames[(len(analysisNames)-1)])
+    if re.search("ReportsMethods:", line):
+        if len(line.split(": ")) != 1 :
+            analysisesMethodReports.append([line.split(": ")[1].split("\n")[0]])
+            analysisMethodsNames.append(analysisNames[(len(analysisNames) - 1)])
     if re.search("}", line):
         statesScope = "false"
         edgesScope = "false"
@@ -56,9 +62,26 @@ for line in graph:
         statesScope = "true"
     if re.search("Connections{", line):
         edgesScope = "true"
-
+analysisesMethodReportsNew2 = []
 for count, item in enumerate(analysisesBadStates):
     analysisesBadStates[count] = analysisesBadStates[count].split(", ")
+for count, item in enumerate(analysisesMethodReports):
+    analysisesMethodReportsNew = []
+    for item2 in item[0].split(","):
+        analysisesMethodReportsNew.append(item2)
+    analysisesMethodReportsNew2.append(analysisesMethodReportsNew)
+analysisesMethodReports = analysisesMethodReportsNew2
+reportPerMethod = []
+for state in states:
+    reportPerMethod.append([state])
+for count,reportMethod in enumerate(analysisesMethodReports):
+    for method in reportMethod:
+        state = method.split("-")[0].split("<")[1]
+        for currstate in reportPerMethod:
+            if currstate[0] == state:
+                currstate.append([method.split("-")[1].split(">")[0],analysisMethodsNames[count]])
+
+
 #################################################################################
 
 
@@ -68,8 +91,8 @@ for bstate in analysisesBadStates:
     if(set(bstate).issubset(set(states))== False):
         print("There is incompatible state in bad states")
         exit()
-if(len(analysisNames) != len(analysisMessages) != len(analysisIDs) != len(analysisTitles) != len(analysisErrorTypes) != len(analysisesBadStates)):
-    print("Unmatched size of each params to each analysis (name, message, id, title, type, bad states)")
+if(len(analysisNames) != len(analysisMessages) != len(analysisIDs) != len(analysisTitles) != len(analysisErrorTypes)):
+    print("Unmatched size of each params to each analysis (name, message, id, title, type)")
     exit()
 if(startState == ""):
     print( "There isn't start state :(")
@@ -113,9 +136,17 @@ for line in lines:
                 output.write(using)
     elif re.search("\\*\\*\\*OptionalInvocationMethods\\*\\*\\*", line):
         for func in funcs:
-            namespace = func[0].split(".")[0]+"."+ func[0].split(".")[1]
+            namespace = ""
+            for count, name in enumerate(func[0].split(".")):
+                if(count != len(func[0].split("."))-2):
+                    namespace = namespace + func[0].split(".")[count]+"."
+                else:
+                    namespace = namespace + func[0].split(".")[count]
+                    break
+
+
             output.write("                       if (declaringTypeName == \"" + namespace+"\" &&")
-            output.write(" ourMethodName.Identifier.ValueText.StartsWith(\""+ func[0].split(".")[2] + "\"))\n")
+            output.write(" ourMethodName.Identifier.ValueText.StartsWith(\""+ func[0].split(".")[len(func[0].split("."))-1] + "\"))\n")
             output.write("                       {\n")
             output.write("                             return " + AnalyzerName + "State." + func[1] + ";\n")
             output.write("                       }\n")
@@ -156,6 +187,28 @@ for line in lines:
             output.write("              category: \"" + AnalyzerName + "\",\n")
             output.write("              defaultSeverity: DiagnosticSeverity." + analysisErrorTypes[count] + ",\n")
             output.write("              isEnabledByDefault: true);\n")
+    elif re.search("\\*\\*\\*ReportingInvalidInvocation\\*\\*\\*",line):
+        for count, diagnostic in enumerate(reportPerMethod):
+
+            output.write("                      case " + AnalyzerName + "State." + diagnostic[0] + ":\n")
+            for count,spesific in enumerate(diagnostic):
+                if count == 0:
+                    continue
+
+                output.write("                           if (")
+                if re.search("|", spesific[0]):
+
+                    for count2, funcName in enumerate(spesific[0].split("|")):
+                        if(count2 != (len(spesific[0].split("|"))-1)):
+                            output.write("method.Name.StartsWith(\"" + funcName + "\") || ")
+                        else:
+                            output.write("method.Name.StartsWith(\"" + funcName + "\"))\n")
+                else:
+                    output.write("method.Name.StartsWith(\"" + spesific[0].split("-")[1].split(">")[0] + "\"))\n")
+                output.write("                            {\n")
+                output.write("                             context.ReportDiagnostic(Diagnostic.Create(" + spesific[1] + ", node.GetLocation()));\n")
+                output.write("                            }\n")
+            output.write("                            break;\n")
     elif re.search("\\*\\*\\*NamesOfAnalysis\\*\\*\\*",line):
         output.write(line.replace("***NamesOfAnalysis***", ', '.join(analysisNames)))
     elif re.search("\\*\\*\\*ReportingDiagnosticIfs\\*\\*\\*",line):
@@ -167,7 +220,7 @@ for line in lines:
                     output.write(" || ")
             output.write(")\n")
             output.write("                     {\n")
-            output.write(("                          context.ReportDiagnostic(Diagnostic.Create(" + analysisNames[count] + ", node.GetLocation()));\n"))
+            output.write(("                          context.ReportDiagnostic(Diagnostic.Create(" + analysisStatesNames[count] + ", node.GetLocation()));\n"))
             output.write(("                     }\n"))
 
 

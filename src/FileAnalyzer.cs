@@ -8,20 +8,44 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
-***UsingOptions***
-
-namespace ***AnalyzerField***
+using System.IO;
+namespace File
 {
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
-    public class ***AnalyzerField***Analyzer : DiagnosticAnalyzer
+    public class FileAnalyzer : DiagnosticAnalyzer
     {
 
-        ***StringAnalysisID***
+      public const string PossibleReadWithoutOpenId = "NN0001";
+      public const string PossibleUnClosedFileId = "NN0002";
+      public const string PossibleWriteWithoutOpenId = "NN0003";
 
-	***DiagnosticDescriptor***
+      internal static DiagnosticDescriptor PossibleReadWithoutOpen =
+          new DiagnosticDescriptor(
+              id: PossibleReadWithoutOpenId,
+              title: "Possible read of scope without open it",
+              messageFormat: "possible trying to read IO Stream file without opened it.",
+              category: "File",
+              defaultSeverity: DiagnosticSeverity.Warning,
+              isEnabledByDefault: true);
+      internal static DiagnosticDescriptor PossibleUnClosedFile =
+          new DiagnosticDescriptor(
+              id: PossibleUnClosedFileId,
+              title: "Possible end of block without closing a file",
+              messageFormat: "possible end of block with file unclosed.",
+              category: "File",
+              defaultSeverity: DiagnosticSeverity.Warning,
+              isEnabledByDefault: true);
+      internal static DiagnosticDescriptor PossibleWriteWithoutOpen =
+          new DiagnosticDescriptor(
+              id: PossibleWriteWithoutOpenId,
+              title: "Possible write of scope without open it",
+              messageFormat: "possible trying writing to IO Stream file without opened it.",
+              category: "File",
+              defaultSeverity: DiagnosticSeverity.Warning,
+              isEnabledByDefault: true);
 
         private static readonly ImmutableArray<DiagnosticDescriptor> s_supported =
-            ImmutableArray.Create(***NamesOfAnalysis***);
+            ImmutableArray.Create(PossibleReadWithoutOpen, PossibleUnClosedFile, PossibleWriteWithoutOpen);
 
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
         {
@@ -41,7 +65,7 @@ namespace ***AnalyzerField***
         private class CodeBlockAnalyzer : CSharpSyntaxWalker
         {
             private readonly CodeBlockAnalysisContext context;
-            private FlowAnalysis<***AnalyzerField***FlowState> flowAnalysis;
+            private FlowAnalysis<FileFlowState> flowAnalysis;
 
             public CodeBlockAnalyzer(CodeBlockAnalysisContext context)
             {
@@ -51,7 +75,7 @@ namespace ***AnalyzerField***
             public void Analyze(SyntaxNode node)
             {
                 // do null flow analysis
-                var flowAnalzyer = new FlowAnalyzer<***AnalyzerField***FlowState>(this.context.SemanticModel, new ***AnalyzerField***FlowState(this.context.SemanticModel));
+                var flowAnalzyer = new FlowAnalyzer<FileFlowState>(this.context.SemanticModel, new FileFlowState(this.context.SemanticModel));
                 this.flowAnalysis = flowAnalzyer.Analyze(node);
 
                 // check assignments and dereferences and report diagnostics
@@ -60,12 +84,15 @@ namespace ***AnalyzerField***
                 var state = this.flowAnalysis.GetFlowState(node);
                 foreach(var variableState in state.VariableStates)
                 {
-                    ***ReportingDiagnosticIfs***
+                     if(variableState.Value == FileState.Unknown || variableState.Value == FileState.Opened)
+                     {
+                          context.ReportDiagnostic(Diagnostic.Create(PossibleUnClosedFile, node.GetLocation()));
+                     }
                 }
 
             }
 
-            private ***AnalyzerField***State GetReferenceState(ExpressionSyntax expression)
+            private FileState GetReferenceState(ExpressionSyntax expression)
             {
                 var state = this.flowAnalysis.GetFlowState(expression);
                 return state.GetReferenceState(expression);
@@ -161,7 +188,7 @@ namespace ***AnalyzerField***
                 CheckAssignment(state.GetAssignmentState(symbol, isInvocationParameter), exprState, expression);
             }
 
-            private void CheckAssignment(***AnalyzerField***State variableState, ***AnalyzerField***State expressionState, ExpressionSyntax expression)
+            private void CheckAssignment(FileState variableState, FileState expressionState, ExpressionSyntax expression)
             {
                 
             }
@@ -190,7 +217,28 @@ namespace ***AnalyzerField***
                 switch (state.GetReferenceState(((MemberAccessExpressionSyntax)node.Expression).Expression))
                 {
 
-                    ***ReportingInvalidInvocation***
+                      case FileState.Unknown:
+                           if (method.Name.StartsWith("Read"))
+                            {
+                             context.ReportDiagnostic(Diagnostic.Create(PossibleReadWithoutOpen, node.GetLocation()));
+                            }
+                           if (method.Name.StartsWith("Write"))
+                            {
+                             context.ReportDiagnostic(Diagnostic.Create(PossibleWriteWithoutOpen, node.GetLocation()));
+                            }
+                            break;
+                      case FileState.Opened:
+                            break;
+                      case FileState.Closed:
+                           if (method.Name.StartsWith("Read"))
+                            {
+                             context.ReportDiagnostic(Diagnostic.Create(PossibleReadWithoutOpen, node.GetLocation()));
+                            }
+                           if (method.Name.StartsWith("Write"))
+                            {
+                             context.ReportDiagnostic(Diagnostic.Create(PossibleWriteWithoutOpen, node.GetLocation()));
+                            }
+                            break;
                 }
 
                 

@@ -1,0 +1,29 @@
+using System;
+
+
+Analysis Name: PossibleSendingNullToFunc
+ID: "NN0001"
+title: "optional send Null object to a function"
+Analysis message: "the object to the func is may be Null"
+type: Warning
+ReportsMethods: <Unknown-Close|Open>,<Null-Close|Open>
+
+States{
+
+Unknown, S
+Null,
+NotNull,
+
+}
+
+
+Connections{
+
+Unknown,<global namespace>.Nullaby.Connect,NotNull
+NotNull,<global namespace>.Nullaby.Close,Null
+NotNull,<global namespace>.Nullaby.Open,NotNull
+Null,<global namespace>.Nullaby.Open,NotNull
+Null,<global namespace>.Nullaby.Connect,NotNull
+Null,<global namespace>.Nullaby.Close,Null
+
+}

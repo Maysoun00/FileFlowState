@@ -10,26 +10,25 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using System.Reflection;
 using System.IO;
-using System.Data;
-namespace DB
+namespace File
 {
-    internal class DBFlowState : FlowState
+    internal class FileFlowState : FlowState
     {
         private readonly SemanticModel model;
-        private readonly ImmutableDictionary<object, DBState> variableStates;
+        private readonly ImmutableDictionary<object, FileState> variableStates;
 
-        public DBFlowState(SemanticModel model)
-            : this(model, ImmutableDictionary.Create<object, DBState>(new VariableComparer(model)))
+        public FileFlowState(SemanticModel model)
+            : this(model, ImmutableDictionary.Create<object, FileState>(new VariableComparer(model)))
         {
         }
 
-        private DBFlowState(SemanticModel model, ImmutableDictionary<object, DBState> variableStates)
+        private FileFlowState(SemanticModel model, ImmutableDictionary<object, FileState> variableStates)
         {
             this.model = model;
             this.variableStates = variableStates;
         }
 
-        public ImmutableDictionary<object, DBState> VariableStates
+        public ImmutableDictionary<object, FileState> VariableStates
         {
             get
             {
@@ -37,11 +36,11 @@ namespace DB
             }
         }
 
-        private DBFlowState With(ImmutableDictionary<object, DBState> newVariableStates)
+        private FileFlowState With(ImmutableDictionary<object, FileState> newVariableStates)
         {
             if (this.variableStates != newVariableStates)
             {
-                return new DBFlowState(this.model, newVariableStates);
+                return new FileFlowState(this.model, newVariableStates);
             }
             else
             {
@@ -51,13 +50,13 @@ namespace DB
 
         public override bool Equals(FlowState state)
         {
-            var nfs = state as DBFlowState;
+            var nfs = state as FileFlowState;
             return nfs != null && nfs.variableStates == this.variableStates;
         }
 
         public override FlowState Join(FlowState state)
         {
-            var nfs = (DBFlowState)state;
+            var nfs = (FileFlowState)state;
             var joinedVariableStates = this.variableStates;
 
             Join(this.variableStates, nfs.variableStates, ref joinedVariableStates);
@@ -67,14 +66,14 @@ namespace DB
         }
 
         private void Join(
-            ImmutableDictionary<object, DBState> branchA,
-            ImmutableDictionary<object, DBState> branchB,
-            ref ImmutableDictionary<object, DBState> joined)
+            ImmutableDictionary<object, FileState> branchA,
+            ImmutableDictionary<object, FileState> branchB,
+            ref ImmutableDictionary<object, FileState> joined)
         {
             // for all items in a
             foreach (var kvp in branchA)
             {
-                DBState bs;
+                FileState bs;
                 if (!branchB.TryGetValue(kvp.Key, out bs))
                 {
                     bs = GetDeclaredState(kvp.Key);
@@ -86,10 +85,10 @@ namespace DB
             }
         }
 
-        private DBState Join(DBState a, DBState b)
+        private FileState Join(FileState a, FileState b)
         {    
 
-            return DBState.Unknown;
+            return FileState.Unknown;
         }
 
         public override FlowState After(SyntaxNode node)
@@ -168,7 +167,7 @@ namespace DB
             }
         }
 
-        public DBFlowState WithReferenceState(ISymbol symbol, DBState state)
+        public FileFlowState WithReferenceState(ISymbol symbol, FileState state)
         {
             switch (symbol.Kind)
             {
@@ -181,7 +180,7 @@ namespace DB
             }
         }
 
-        public DBFlowState WithReferenceState(ExpressionSyntax expr, DBState state)
+        public FileFlowState WithReferenceState(ExpressionSyntax expr, FileState state)
         {
             var variable = GetVariableExpression(expr);
             if (variable != null)
@@ -235,7 +234,7 @@ namespace DB
             return expr;
         }
 
-        public DBState GetAssignmentState(ExpressionSyntax variable, bool isInvocationParameter = false)
+        public FileState GetAssignmentState(ExpressionSyntax variable, bool isInvocationParameter = false)
         {
             var symbol = this.model.GetSymbolInfo(variable).Symbol;
             if (symbol != null)
@@ -244,21 +243,21 @@ namespace DB
             }
             else
             {
-                return DBState.Unknown;
+                return FileState.Unknown;
             }
         }
 
-        public DBState GetAssignmentState(ISymbol symbol, bool isInvocationParameter = false)
+        public FileState GetAssignmentState(ISymbol symbol, bool isInvocationParameter = false)
         {
             switch (symbol.Kind)
             {
                 case SymbolKind.Local:
-                    return DBState.Unknown;
+                    return FileState.Unknown;
                 case SymbolKind.Parameter:
                     if (!isInvocationParameter)
                     {
                         // method body parameters get their state assigned just like locals
-                        return DBState.Unknown;
+                        return FileState.Unknown;
                     }
                     else
                     {
@@ -269,14 +268,14 @@ namespace DB
             }
         }
 
-        public DBState GetReferenceState(ExpressionSyntax expression)
+        public FileState GetReferenceState(ExpressionSyntax expression)
         {
             if (expression != null)
             {
                 expression = WithoutParens(expression);
 
                 var expSymbol = this.model.GetSymbolInfo(expression).Symbol;
-                DBState state;
+                FileState state;
                 if (expSymbol != null && this.variableStates.TryGetValue(expSymbol.OriginalDefinition, out state))
                 {
                     return state;
@@ -286,7 +285,7 @@ namespace DB
                 {
 
                     case SyntaxKind.NullLiteralExpression:
-                        return DBState.Unknown;
+                        return FileState.Unknown;
 
                     case SyntaxKind.InvocationExpression:
                         var ourMethodName = ((MemberAccessExpressionSyntax)((InvocationExpressionSyntax)expression).Expression).Name;
@@ -299,21 +298,29 @@ namespace DB
                         );
                         var methodName = methodSymbol.Name;
                      
-                       if (declaringTypeName == "<global namespace>.DB" && ourMethodName.Identifier.ValueText.StartsWith("Open"))
+                       if (declaringTypeName == "System.IO.File" && ourMethodName.Identifier.ValueText.StartsWith("Create"))
                        {
-                             return DBState.Connected;
+                             return FileState.Opened;
                        }
-                       if (declaringTypeName == "<global namespace>.DB" && ourMethodName.Identifier.ValueText.StartsWith("Close"))
+                       if (declaringTypeName == "System.IO.File" && ourMethodName.Identifier.ValueText.StartsWith("Create"))
                        {
-                             return DBState.Closed;
+                             return FileState.Opened;
                        }
-                       if (declaringTypeName == "<global namespace>.DB" && ourMethodName.Identifier.ValueText.StartsWith("Close"))
+                       if (declaringTypeName == "System.IO.Stream" && ourMethodName.Identifier.ValueText.StartsWith("Close"))
                        {
-                             return DBState.Closed;
+                             return FileState.Closed;
                        }
-                       if (declaringTypeName == "global namespace>.DB" && ourMethodName.Identifier.ValueText.StartsWith("Open"))
+                       if (declaringTypeName == "System.IO.Stream" && ourMethodName.Identifier.ValueText.StartsWith("Close"))
                        {
-                             return DBState.Connected;
+                             return FileState.Closed;
+                       }
+                       if (declaringTypeName == "System.IO.FileStream" && ourMethodName.Identifier.ValueText.StartsWith("Read"))
+                       {
+                             return FileState.Opened;
+                       }
+                       if (declaringTypeName == "System.IO.FileStream" && ourMethodName.Identifier.ValueText.StartsWith("Write"))
+                       {
+                             return FileState.Opened;
                        }
 
                         return GetReferenceState(((MemberAccessExpressionSyntax)((InvocationExpressionSyntax)expression).Expression).Expression);
@@ -330,11 +337,11 @@ namespace DB
                 }
             }
 
-            return DBState.Unknown;
+            return FileState.Unknown;
         }
-        public DBState GetReferenceState(ISymbol symbol)
+        public FileState GetReferenceState(ISymbol symbol)
         {
-            DBState state;
+            FileState state;
             if (this.variableStates.TryGetValue(symbol.OriginalDefinition, out state))
             {
                 return state;
@@ -343,7 +350,7 @@ namespace DB
             return GetDeclaredState(symbol);
         }
 
-        public DBState GetDeclaredState(object symbolOrSyntax)
+        public FileState GetDeclaredState(object symbolOrSyntax)
         {
             var syntax = symbolOrSyntax as ExpressionSyntax;
             if (syntax != null)
@@ -357,10 +364,10 @@ namespace DB
                 return GetDeclaredState(symbol);
             }
 
-            return DBState.Unknown;
+            return FileState.Unknown;
         }
 
-        public DBState GetDeclaredState(ExpressionSyntax syntax)
+        public FileState GetDeclaredState(ExpressionSyntax syntax)
         {
             var symbol = this.model.GetSymbolInfo(syntax).Symbol;
             if (symbol != null)
@@ -369,30 +376,30 @@ namespace DB
             }
             else
             {
-                return DBState.Unknown;
+                return FileState.Unknown;
             }
         }
 
-        public static DBState GetDeclaredState(ISymbol symbol)
+        public static FileState GetDeclaredState(ISymbol symbol)
         {
             switch (symbol.Kind)
             {
                 case SymbolKind.Local:
-                    return DBState.Unknown;
+                    return FileState.Unknown;
 
                 default:
-                    return GetSymbolInfo(symbol).DBState;
+                    return GetSymbolInfo(symbol).FileState;
             }
         }
 
 
         private class SymbolInfo
         {
-            public readonly DBState DBState;
+            public readonly FileState FileState;
 
-            public SymbolInfo(DBState defaultState)
+            public SymbolInfo(FileState defaultState)
             {
-                this.DBState = defaultState;
+                this.FileState = defaultState;
             }
         }
 
@@ -414,7 +421,7 @@ namespace DB
         private static SymbolInfo CreateSymbolInfo(ISymbol symbol)
         {
             
-            return new SymbolInfo(DBState.Unknown);
+            return new SymbolInfo(FileState.Unknown);
         }
 
         private static ITypeSymbol GetVariableType(ISymbol symbol)

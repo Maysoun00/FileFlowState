@@ -9,27 +9,26 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using System.Reflection;
-***UsingOptions***
 
-namespace ***AnalyzerField***
+namespace Null
 {
-    internal class ***AnalyzerField***FlowState : FlowState
+    internal class NullFlowState : FlowState
     {
         private readonly SemanticModel model;
-        private readonly ImmutableDictionary<object, ***AnalyzerField***State> variableStates;
+        private readonly ImmutableDictionary<object, NullState> variableStates;
 
-        public ***AnalyzerField***FlowState(SemanticModel model)
-            : this(model, ImmutableDictionary.Create<object, ***AnalyzerField***State>(new VariableComparer(model)))
+        public NullFlowState(SemanticModel model)
+            : this(model, ImmutableDictionary.Create<object, NullState>(new VariableComparer(model)))
         {
         }
 
-        private ***AnalyzerField***FlowState(SemanticModel model, ImmutableDictionary<object, ***AnalyzerField***State> variableStates)
+        private NullFlowState(SemanticModel model, ImmutableDictionary<object, NullState> variableStates)
         {
             this.model = model;
             this.variableStates = variableStates;
         }
 
-        public ImmutableDictionary<object, ***AnalyzerField***State> VariableStates
+        public ImmutableDictionary<object, NullState> VariableStates
         {
             get
             {
@@ -37,11 +36,11 @@ namespace ***AnalyzerField***
             }
         }
 
-        private ***AnalyzerField***FlowState With(ImmutableDictionary<object, ***AnalyzerField***State> newVariableStates)
+        private NullFlowState With(ImmutableDictionary<object, NullState> newVariableStates)
         {
             if (this.variableStates != newVariableStates)
             {
-                return new ***AnalyzerField***FlowState(this.model, newVariableStates);
+                return new NullFlowState(this.model, newVariableStates);
             }
             else
             {
@@ -51,13 +50,13 @@ namespace ***AnalyzerField***
 
         public override bool Equals(FlowState state)
         {
-            var nfs = state as ***AnalyzerField***FlowState;
+            var nfs = state as NullFlowState;
             return nfs != null && nfs.variableStates == this.variableStates;
         }
 
         public override FlowState Join(FlowState state)
         {
-            var nfs = (***AnalyzerField***FlowState)state;
+            var nfs = (NullFlowState)state;
             var joinedVariableStates = this.variableStates;
 
             Join(this.variableStates, nfs.variableStates, ref joinedVariableStates);
@@ -67,14 +66,14 @@ namespace ***AnalyzerField***
         }
 
         private void Join(
-            ImmutableDictionary<object, ***AnalyzerField***State> branchA,
-            ImmutableDictionary<object, ***AnalyzerField***State> branchB,
-            ref ImmutableDictionary<object, ***AnalyzerField***State> joined)
+            ImmutableDictionary<object, NullState> branchA,
+            ImmutableDictionary<object, NullState> branchB,
+            ref ImmutableDictionary<object, NullState> joined)
         {
             // for all items in a
             foreach (var kvp in branchA)
             {
-                ***AnalyzerField***State bs;
+                NullState bs;
                 if (!branchB.TryGetValue(kvp.Key, out bs))
                 {
                     bs = GetDeclaredState(kvp.Key);
@@ -86,10 +85,10 @@ namespace ***AnalyzerField***
             }
         }
 
-        private ***AnalyzerField***State Join(***AnalyzerField***State a, ***AnalyzerField***State b)
+        private NullState Join(NullState a, NullState b)
         {    
 
-            return ***AnalyzerField***State.***FirstState***;
+            return NullState.Unknown;
         }
 
         public override FlowState After(SyntaxNode node)
@@ -168,7 +167,7 @@ namespace ***AnalyzerField***
             }
         }
 
-        public ***AnalyzerField***FlowState WithReferenceState(ISymbol symbol, ***AnalyzerField***State state)
+        public NullFlowState WithReferenceState(ISymbol symbol, NullState state)
         {
             switch (symbol.Kind)
             {
@@ -181,7 +180,7 @@ namespace ***AnalyzerField***
             }
         }
 
-        public ***AnalyzerField***FlowState WithReferenceState(ExpressionSyntax expr, ***AnalyzerField***State state)
+        public NullFlowState WithReferenceState(ExpressionSyntax expr, NullState state)
         {
             var variable = GetVariableExpression(expr);
             if (variable != null)
@@ -235,7 +234,7 @@ namespace ***AnalyzerField***
             return expr;
         }
 
-        public ***AnalyzerField***State GetAssignmentState(ExpressionSyntax variable, bool isInvocationParameter = false)
+        public NullState GetAssignmentState(ExpressionSyntax variable, bool isInvocationParameter = false)
         {
             var symbol = this.model.GetSymbolInfo(variable).Symbol;
             if (symbol != null)
@@ -244,21 +243,21 @@ namespace ***AnalyzerField***
             }
             else
             {
-                return ***AnalyzerField***State.***FirstState***;
+                return NullState.Unknown;
             }
         }
 
-        public ***AnalyzerField***State GetAssignmentState(ISymbol symbol, bool isInvocationParameter = false)
+        public NullState GetAssignmentState(ISymbol symbol, bool isInvocationParameter = false)
         {
             switch (symbol.Kind)
             {
                 case SymbolKind.Local:
-                    return ***AnalyzerField***State.***FirstState***;
+                    return NullState.Unknown;
                 case SymbolKind.Parameter:
                     if (!isInvocationParameter)
                     {
                         // method body parameters get their state assigned just like locals
-                        return ***AnalyzerField***State.***FirstState***;
+                        return NullState.Unknown;
                     }
                     else
                     {
@@ -269,14 +268,14 @@ namespace ***AnalyzerField***
             }
         }
 
-        public ***AnalyzerField***State GetReferenceState(ExpressionSyntax expression)
+        public NullState GetReferenceState(ExpressionSyntax expression)
         {
             if (expression != null)
             {
                 expression = WithoutParens(expression);
 
                 var expSymbol = this.model.GetSymbolInfo(expression).Symbol;
-                ***AnalyzerField***State state;
+                NullState state;
                 if (expSymbol != null && this.variableStates.TryGetValue(expSymbol.OriginalDefinition, out state))
                 {
                     return state;
@@ -286,7 +285,7 @@ namespace ***AnalyzerField***
                 {
 
                     case SyntaxKind.NullLiteralExpression:
-                        return ***AnalyzerField***State.***FirstState***;
+                        return NullState.Unknown;
 
                     case SyntaxKind.InvocationExpression:
                         var ourMethodName = ((MemberAccessExpressionSyntax)((InvocationExpressionSyntax)expression).Expression).Name;
@@ -299,7 +298,30 @@ namespace ***AnalyzerField***
                         );
                         var methodName = methodSymbol.Name;
                      
-                        ***OptionalInvocationMethods***
+                       if (declaringTypeName == "<global namespace>.Nullaby" && ourMethodName.Identifier.ValueText.StartsWith("Connect"))
+                       {
+                             return NullState.NotNull;
+                       }
+                       if (declaringTypeName == "<global namespace>.Nullaby" && ourMethodName.Identifier.ValueText.StartsWith("Close"))
+                       {
+                             return NullState.Null;
+                       }
+                       if (declaringTypeName == "<global namespace>.Nullaby" && ourMethodName.Identifier.ValueText.StartsWith("Open"))
+                       {
+                             return NullState.NotNull;
+                       }
+                       if (declaringTypeName == "<global namespace>.Nullaby" && ourMethodName.Identifier.ValueText.StartsWith("Open"))
+                       {
+                             return NullState.NotNull;
+                       }
+                       if (declaringTypeName == "<global namespace>.Nullaby" && ourMethodName.Identifier.ValueText.StartsWith("Connect"))
+                       {
+                             return NullState.NotNull;
+                       }
+                       if (declaringTypeName == "<global namespace>.Nullaby" && ourMethodName.Identifier.ValueText.StartsWith("Close"))
+                       {
+                             return NullState.Null;
+                       }
 
                         return GetReferenceState(((MemberAccessExpressionSyntax)((InvocationExpressionSyntax)expression).Expression).Expression);
 
@@ -315,11 +337,11 @@ namespace ***AnalyzerField***
                 }
             }
 
-            return ***AnalyzerField***State.***FirstState***;
+            return NullState.Unknown;
         }
-        public ***AnalyzerField***State GetReferenceState(ISymbol symbol)
+        public NullState GetReferenceState(ISymbol symbol)
         {
-            ***AnalyzerField***State state;
+            NullState state;
             if (this.variableStates.TryGetValue(symbol.OriginalDefinition, out state))
             {
                 return state;
@@ -328,7 +350,7 @@ namespace ***AnalyzerField***
             return GetDeclaredState(symbol);
         }
 
-        public ***AnalyzerField***State GetDeclaredState(object symbolOrSyntax)
+        public NullState GetDeclaredState(object symbolOrSyntax)
         {
             var syntax = symbolOrSyntax as ExpressionSyntax;
             if (syntax != null)
@@ -342,10 +364,10 @@ namespace ***AnalyzerField***
                 return GetDeclaredState(symbol);
             }
 
-            return ***AnalyzerField***State.***FirstState***;
+            return NullState.Unknown;
         }
 
-        public ***AnalyzerField***State GetDeclaredState(ExpressionSyntax syntax)
+        public NullState GetDeclaredState(ExpressionSyntax syntax)
         {
             var symbol = this.model.GetSymbolInfo(syntax).Symbol;
             if (symbol != null)
@@ -354,30 +376,30 @@ namespace ***AnalyzerField***
             }
             else
             {
-                return ***AnalyzerField***State.***FirstState***;
+                return NullState.Unknown;
             }
         }
 
-        public static ***AnalyzerField***State GetDeclaredState(ISymbol symbol)
+        public static NullState GetDeclaredState(ISymbol symbol)
         {
             switch (symbol.Kind)
             {
                 case SymbolKind.Local:
-                    return ***AnalyzerField***State.***FirstState***;
+                    return NullState.Unknown;
 
                 default:
-                    return GetSymbolInfo(symbol).***AnalyzerField***State;
+                    return GetSymbolInfo(symbol).NullState;
             }
         }
 
 
         private class SymbolInfo
         {
-            public readonly ***AnalyzerField***State ***AnalyzerField***State;
+            public readonly NullState NullState;
 
-            public SymbolInfo(***AnalyzerField***State defaultState)
+            public SymbolInfo(NullState defaultState)
             {
-                this.***AnalyzerField***State = defaultState;
+                this.NullState = defaultState;
             }
         }
 
@@ -399,7 +421,7 @@ namespace ***AnalyzerField***
         private static SymbolInfo CreateSymbolInfo(ISymbol symbol)
         {
             
-            return new SymbolInfo(***AnalyzerField***State.***FirstState***);
+            return new SymbolInfo(NullState.Unknown);
         }
 
         private static ITypeSymbol GetVariableType(ISymbol symbol)

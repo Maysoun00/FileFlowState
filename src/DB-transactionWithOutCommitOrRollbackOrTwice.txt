@@ -1,0 +1,37 @@
+using System;
+
+
+Analysis Name: PossibleNotDoingRollbackOrCommit
+ID: "NN0001"
+title: "optional didn't rollback/commit"
+Analysis message: "The Transaction stayed connected without any rollback/commit"
+type: Warning
+ReportStates: Connected, Unknown
+
+Analysis Name: PossibleTwiceRollbackOrCommit
+ID: "NN0002"
+title:  "optional doing commit/rollback twice"
+Analysis message: "The transaction may rollback or commit more than once"
+ReportsMethods:  <Commit-Commit|Rollback>,<Rollback-Rollback|Commit>
+type: Warning
+
+States{
+
+Unknown, S
+Connected,
+Rollback,
+Commit,
+
+}
+
+
+Connections{
+
+Unknown,<global namespace>.Transaction.Connect,Connected
+Connected,<global namespace>.Transaction.Rollback,Rollback
+Connected,<global namespace>.Transaction.Commit,Commit
+Rollback,global namespace>.Transaction.Rollback,Rollback
+Rollback,<global namespace>.Transaction.Commit,Commit
+Commit,global namespace>.Transaction.Rollback,Rollback
+Commit,<global namespace>.Transaction.Commit,Commit
+}

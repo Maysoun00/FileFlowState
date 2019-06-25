@@ -8,27 +8,26 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
-using System.Data;
 
-namespace DB
+namespace Null
 {
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
-    public class DBAnalyzer : DiagnosticAnalyzer
+    public class NullAnalyzer : DiagnosticAnalyzer
     {
 
-      public const string PossibleEndOfScopeWithoutCloseId = "NN0001";
+      public const string PossibleSendingNullToFuncId = "NN0001";
 
-      internal static DiagnosticDescriptor PossibleEndOfScopeWithoutClose =
+      internal static DiagnosticDescriptor PossibleSendingNullToFunc =
           new DiagnosticDescriptor(
-              id: PossibleEndOfScopeWithoutCloseId,
-              title: "Possible end of scope without close",
-              messageFormat: "Possible end of scope without closing a DB connection.",
-              category: "DB",
+              id: PossibleSendingNullToFuncId,
+              title: "optional send Null object to a function",
+              messageFormat: "the object to the func is may be Null",
+              category: "Null",
               defaultSeverity: DiagnosticSeverity.Warning,
               isEnabledByDefault: true);
 
         private static readonly ImmutableArray<DiagnosticDescriptor> s_supported =
-            ImmutableArray.Create(PossibleEndOfScopeWithoutClose);
+            ImmutableArray.Create(PossibleSendingNullToFunc);
 
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
         {
@@ -48,7 +47,7 @@ namespace DB
         private class CodeBlockAnalyzer : CSharpSyntaxWalker
         {
             private readonly CodeBlockAnalysisContext context;
-            private FlowAnalysis<DBFlowState> flowAnalysis;
+            private FlowAnalysis<NullFlowState> flowAnalysis;
 
             public CodeBlockAnalyzer(CodeBlockAnalysisContext context)
             {
@@ -58,7 +57,7 @@ namespace DB
             public void Analyze(SyntaxNode node)
             {
                 // do null flow analysis
-                var flowAnalzyer = new FlowAnalyzer<DBFlowState>(this.context.SemanticModel, new DBFlowState(this.context.SemanticModel));
+                var flowAnalzyer = new FlowAnalyzer<NullFlowState>(this.context.SemanticModel, new NullFlowState(this.context.SemanticModel));
                 this.flowAnalysis = flowAnalzyer.Analyze(node);
 
                 // check assignments and dereferences and report diagnostics
@@ -67,15 +66,11 @@ namespace DB
                 var state = this.flowAnalysis.GetFlowState(node);
                 foreach(var variableState in state.VariableStates)
                 {
-                     if(variableState.Value == DBState.Unknown || variableState.Value == DBState.Connected)
-                     {
-                          context.ReportDiagnostic(Diagnostic.Create(PossibleEndOfScopeWithoutClose, node.GetLocation()));
-                     }
                 }
 
             }
 
-            private DBState GetReferenceState(ExpressionSyntax expression)
+            private NullState GetReferenceState(ExpressionSyntax expression)
             {
                 var state = this.flowAnalysis.GetFlowState(expression);
                 return state.GetReferenceState(expression);
@@ -171,7 +166,7 @@ namespace DB
                 CheckAssignment(state.GetAssignmentState(symbol, isInvocationParameter), exprState, expression);
             }
 
-            private void CheckAssignment(DBState variableState, DBState expressionState, ExpressionSyntax expression)
+            private void CheckAssignment(NullState variableState, NullState expressionState, ExpressionSyntax expression)
             {
                 
             }
@@ -196,9 +191,24 @@ namespace DB
    
                 // check for possible dereference of null on member access (dot)
                 var state = this.flowAnalysis.GetFlowState(node.Expression);
+                var method = context.SemanticModel.GetSymbolInfo(node).Symbol as IMethodSymbol;
                 switch (state.GetReferenceState(((MemberAccessExpressionSyntax)node.Expression).Expression))
                 {
-                      
+
+                      case NullState.Unknown:
+                           if (method.Name.StartsWith("Close") || method.Name.StartsWith("Open"))
+                            {
+                             context.ReportDiagnostic(Diagnostic.Create(PossibleSendingNullToFunc, node.GetLocation()));
+                            }
+                            break;
+                      case NullState.Null:
+                           if (method.Name.StartsWith("Close") || method.Name.StartsWith("Open"))
+                            {
+                             context.ReportDiagnostic(Diagnostic.Create(PossibleSendingNullToFunc, node.GetLocation()));
+                            }
+                            break;
+                      case NullState.NotNull:
+                            break;
                 }
 
                 
